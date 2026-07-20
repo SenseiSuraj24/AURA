@@ -54,61 +54,70 @@ if not isinstance(sys.stdout, io.TextIOWrapper):
 # -----------------------------------------------------------------------------
 # Initialize global scaler once for the entire benchmark run
 # -----------------------------------------------------------------------------
-_loader = CICIDSDataLoader()
-try:
-    import joblib
-    import os
-    scaler_path = os.path.join(cfg.MODELS_DIR, "scaler.joblib")
-    if os.path.exists(scaler_path):
-        _shared_scaler = joblib.load(scaler_path)
-        logger.info("Loaded saved global dataset scaler.")
-    else:
-        _shared_scaler = _loader.fit_scaler()
-        logger.info("Global dataset scaler initialized successfully (fitted on fly).")
-    
-    from aura.split_manager import get_canonical_split
+_loader = None
+_shared_scaler = None
+server_attack_windows = None
+_all_train_flows = None
+_client_pool = None
+_root_size = cfg.FLTRUST_ROOT_SAMPLES
 
-    # Load all windows
-    all_windows = list(_loader.stream_graphs(_shared_scaler))
+def initialize_benchmark_data():
+    global _loader, _shared_scaler, server_attack_windows, _all_train_flows, _client_pool
+    _loader = CICIDSDataLoader()
+    try:
+        import joblib
+        import os
+        scaler_path = os.path.join(cfg.MODELS_DIR, "scaler.joblib")
+        if os.path.exists(scaler_path):
+            _shared_scaler = joblib.load(scaler_path)
+            logger.info("Loaded saved global dataset scaler.")
+        else:
+            _shared_scaler = _loader.fit_scaler()
+            logger.info("Global dataset scaler initialized successfully (fitted on fly).")
+        
+        from aura.split_manager import get_canonical_split
 
-    # Get canonical train/test split
-    calib_windows, train_windows, test_windows, server_attack_windows = get_canonical_split(
-        all_windows, test_fraction=0.20
-    )
-    
-    # CRITICAL: calibration_windows are a prefix of train_windows.
-    # To guarantee zero data leakage between the server's root dataset
-    # (built from calib_windows) and client training data, we must remove them.
-    train_windows = train_windows[len(calib_windows):]
+        # Load all windows
+        all_windows = list(_loader.stream_graphs(_shared_scaler))
 
-    # Extract ALL flows from train windows, randomised once for reproducibility
-    _all_train_flows = torch.cat([
-        graph['edge_attr'] for graph, labels in train_windows
-    ])
-    _all_train_flows = _all_train_flows[torch.randperm(len(_all_train_flows))]
+        # Get canonical train/test split
+        calib_windows, train_windows, test_windows, server_attack_windows = get_canonical_split(
+            all_windows, test_fraction=0.20
+        )
+        
+        # CRITICAL: calibration_windows are a prefix of train_windows.
+        # To guarantee zero data leakage between the server's root dataset
+        # (built from calib_windows) and client training data, we must remove them.
+        train_windows = train_windows[len(calib_windows):]
 
-    # --- Privacy-preserving partition boundary ---
-    # Root dataset takes the FIRST cfg.FLTRUST_ROOT_SAMPLES rows.
-    # Each client gets a non-overlapping slice from the remainder,
-    # so no client flow ever appears in the server's root dataset.
-    _root_size = cfg.FLTRUST_ROOT_SAMPLES  # e.g. 2000
-    _client_pool = _all_train_flows[_root_size:]  # everything after root slice
+        # Extract ALL flows from train windows, randomised once for reproducibility
+        _all_train_flows = torch.cat([
+            graph['edge_attr'] for graph, labels in train_windows
+        ])
+        _all_train_flows = _all_train_flows[torch.randperm(len(_all_train_flows))]
 
-    def _build_benchmark_root_dataset(n_samples=None):
-        """Return the fixed root dataset (first _root_size flows)."""
-        n = n_samples or _root_size
-        return _all_train_flows[:n]
+        # --- Privacy-preserving partition boundary ---
+        # Root dataset takes the FIRST cfg.FLTRUST_ROOT_SAMPLES rows.
+        # Each client gets a non-overlapping slice from the remainder,
+        # so no client flow ever appears in the server's root dataset.
+        _client_pool = _all_train_flows[_root_size:]  # everything after root slice
 
-    def _get_client_slice(client_idx: int, num_clients: int) -> torch.Tensor:
-        """Return a non-overlapping slice of the client pool for client_idx."""
-        per_client = len(_client_pool) // num_clients
-        start = client_idx * per_client
-        end   = start + per_client
-        return _client_pool[start:end]
+    except Exception as e:
+        logger.error(f"FATAL: Could not fit or load scaler on CSV dataset: {e}.")
+        raise RuntimeError(f"Scaler initialization failed: {e}")
 
-except Exception as e:
-    logger.error(f"FATAL: Could not fit or load scaler on CSV dataset: {e}.")
-    raise RuntimeError(f"Scaler initialization failed: {e}")
+def _build_benchmark_root_dataset(n_samples=None):
+    """Return the fixed root dataset (first _root_size flows)."""
+    n = n_samples or _root_size
+    return _all_train_flows[:n]
+
+def _get_client_slice(client_idx: int, num_clients: int) -> torch.Tensor:
+    """Return a non-overlapping slice of the client pool for client_idx."""
+    per_client = len(_client_pool) // num_clients
+    start = client_idx * per_client
+    end   = start + per_client
+    return _client_pool[start:end]
+
 
 
 def generate_client_data(
@@ -194,7 +203,7 @@ def _run_local_training_dual(
 ) -> tuple:
     from aura.local_training import run_two_pass_local_training
     
-    z_buffer, n_benign, n_high_mse, _, step16_state = run_two_pass_local_training(
+    z_buffer, n_benign, n_high_mse, _, ch1_export_state = run_two_pass_local_training(
         ae, attack_head, all_flows,
         ae_optimizer, head_optimizer,
         mse_threshold=mse_threshold_high,
@@ -205,9 +214,9 @@ def _run_local_training_dual(
     assert n_benign > 0 or n_high_mse > 0, "FATAL: No flows processed in two-pass training"
     logger.info(f"Two-pass: benign={n_benign}, high_mse={n_high_mse}, z_buffer={sum(len(z) for z in z_buffer)}")
     
-    # Export Step-16 state for CH1
-    ae_delta = {k: step16_state[k] - global_ae_weights[k]
-                for k in step16_state}
+    # Export CH1 representation based on optimization horizon policy
+    ae_delta = {k: ch1_export_state[k] - global_ae_weights[k]
+                for k in ch1_export_state}
     
     if n_high_mse > 0:
         head_delta = {k: attack_head.state_dict()[k].clone() - global_head_weights[k]
@@ -522,14 +531,24 @@ def run_experiment(
                   f"(root={len(filtered_root_data)}, bs={actual_bs})")
             
             root_ae.train()
+            ch1_export_state = None
+            step_count = 0
+            
             for (batch,) in root_loader:
                 root_ae_opt.zero_grad()
                 _recon, _ = root_ae(batch)
                 _ae_loss = F.mse_loss(_recon, batch)
                 _ae_loss.backward()
                 root_ae_opt.step()
+                
+                step_count += 1
+                if step_count == 32:
+                    ch1_export_state = {k: v.clone() for k, v in root_ae.state_dict().items()}
+                    
+            if ch1_export_state is None:
+                ch1_export_state = {k: v.clone() for k, v in root_ae.state_dict().items()}
             
-            r_ae_delta = {k: root_ae.state_dict()[k].clone() - g_ae_w[k]
+            r_ae_delta = {k: ch1_export_state[k] - g_ae_w[k]
                           for k in g_ae_w}
             
             from aura.root_gradient import _build_root_head_reference
@@ -758,6 +777,8 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     random.seed(args.seed)
+    
+    initialize_benchmark_data()
 
     print("\n" + "=" * 70)
     print("  AURA Byzantine Benchmark  --  DC-FLTrust Deception Experiment")
