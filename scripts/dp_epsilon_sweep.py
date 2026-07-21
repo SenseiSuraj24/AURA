@@ -112,7 +112,7 @@ def run_federation_at_sigma(sigma: float, n_rounds: int, n_clients: int,
         ))
 
     global_model = AURAModelBundle().to(device)
-    root_data = _build_root_dataset()
+    root_data, _ = _build_root_dataset(scaler)
 
     round_records = []
     for rnd in range(1, n_rounds + 1):
@@ -139,6 +139,30 @@ def run_federation_at_sigma(sigma: float, n_rounds: int, n_clients: int,
             server_lr=cfg.FLTRUST_SERVER_LR,
             min_trust=cfg.FLTRUST_MIN_TRUST_SCORE,
         )
+        
+        if rnd == n_rounds:
+            g_ae_w = {k: v.clone().cpu() for k, v in global_model.autoencoder.state_dict().items()}
+            g_head_w = {k: v.clone().cpu() for k, v in global_model.attack_head.state_dict().items()}
+            c_ae_deltas = []
+            c_head_deltas = []
+            roles = {idx: "honest" for idx in range(len(clients))}
+            dummy = AURAModelBundle().to(device)
+            for arrs in client_updates:
+                ndarrays_to_model(dummy, arrs)
+                c_ae = dummy.autoencoder.state_dict()
+                c_head = dummy.attack_head.state_dict()
+                c_ae_deltas.append({k: c_ae[k].cpu() - g_ae_w[k] for k in g_ae_w})
+                c_head_deltas.append({k: c_head[k].cpu() - g_head_w[k] for k in g_head_w})
+                
+            export_data = {
+                'global_ae_weights': g_ae_w,
+                'global_head_weights': g_head_w,
+                'client_ae_deltas': c_ae_deltas,
+                'client_head_deltas': c_head_deltas,
+                'roles': roles,
+                'train_data': clients[0].train_data.cpu()
+            }
+            
         with torch.no_grad():
             for p, arr in zip(global_model.parameters(), aggregated):
                 p.copy_(torch.tensor(arr, device=device))
@@ -155,7 +179,7 @@ def run_federation_at_sigma(sigma: float, n_rounds: int, n_clients: int,
             f"eps_ae(client0)={per_client_eps[0]['dp_epsilon_ae']:.4f}"
         )
 
-    return {"sigma": sigma, "rounds": round_records, "final_model": global_model}
+    return {"sigma": sigma, "rounds": round_records, "final_model": global_model, "export_data": export_data}
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -205,20 +229,31 @@ def run_privacy_attacks(sigma: float, global_model: AURAModelBundle) -> dict:
             shutil.copy2(backup_path, MIA_TARGET_PATH)
             backup_path.unlink()
 
-    inversion_result = {"ran": False, "not_sigma_sensitive": True,
-                         "note": ("gradient_inversion_attack.py builds its own random-weight "
-                                  "standalone model internally; it has no --sigma flag and does "
-                                  "not consume this checkpoint. Result recorded for completeness "
-                                  "but is NOT comparable across sigma values until the script "
-                                  "is extended to accept a trained checkpoint.")}
+    inversion_result = {"ran": False, "not_sigma_sensitive": False}
+    
+    import pickle
+    export_path_pkl = SWEEP_MODELS_DIR / f"{sigma_tag}_exported_tensors.pkl"
+    with open(export_path_pkl, 'wb') as f:
+        pickle.dump(global_model.export_data, f)
+        
+    json_path = SWEEP_MODELS_DIR / f"{sigma_tag}_dlg_result.json"
+    
     try:
         proc = subprocess.run(
             [sys.executable, "aura_attacks/gradient_inversion_attack.py",
-             "--steps", "50", "--restarts", "1"],  # cheap pass; full run is expensive x5
+             "--steps", "50", "--restarts", "1",
+             "--tensor-file", str(export_path_pkl),
+             "--client-id", "0",
+             "--output-json", str(json_path)],
             cwd=str(AURA_ROOT), capture_output=True, text=True, timeout=600,
         )
-        inversion_result.update({"ran": True, "returncode": proc.returncode,
-                                  "stdout_tail": proc.stdout[-2000:]})
+        
+        if json_path.exists():
+            with open(json_path, 'r') as f:
+                dlg_metrics = json.load(f)
+            inversion_result.update({"ran": True, "returncode": proc.returncode, "metrics": dlg_metrics})
+        else:
+            inversion_result.update({"ran": True, "returncode": proc.returncode, "error": "JSON not produced"})
     except Exception as e:
         inversion_result.update({"ran": False, "error": str(e)})
 
@@ -270,6 +305,7 @@ def main():
                 "elapsed_sec": round(time.time() - t0, 1),
             }
             if not skip_attacks:
+                fed["final_model"].export_data = fed["export_data"]
                 entry["privacy_attacks"] = run_privacy_attacks(sigma, fed["final_model"])
             sweep_results.append(entry)
     finally:
@@ -290,12 +326,25 @@ def main():
     logger.info(f"Wrote {out_path}")
 
     print("\n=== DP EPSILON SWEEP SUMMARY ===")
-    print(f"{'sigma':>6} | {'F1':>7} | {'FPR':>7} | {'eps_ae(last round, client0)':>28}")
+    print(f"{'sigma':>6} | {'F1':>7} | {'FPR':>7} | {'eps_ae(last round, client0)':>28} | {'DLG Cosine':>12}")
+    
+    csv_rows = []
     for e in sweep_results:
         last_round = e["round_records"][-1]
         eps0 = last_round["per_client_epsilon"][0]["dp_epsilon_ae"]
+        dlg_cos = e.get("privacy_attacks", {}).get("gradient_inversion", {}).get("metrics", {}).get("cosine_similarity", -1.0)
+        dlg_mse = e.get("privacy_attacks", {}).get("gradient_inversion", {}).get("metrics", {}).get("mse", -1.0)
+        
         print(f"{e['sigma']:>6} | {e['detection_metrics']['F1']:>7} | "
-              f"{e['detection_metrics']['FPR']:>7} | {eps0:>28.4f}")
+              f"{e['detection_metrics']['FPR']:>7} | {eps0:>28.4f} | {dlg_cos:>12.4f}")
+              
+        csv_rows.append(f"{e['sigma']},{eps0},{e['sigma']},{e['detection_metrics']['AUC']},0.0,0.0,{e['detection_metrics']['Precision']},{e['detection_metrics']['Recall']},{e['detection_metrics']['F1']},{dlg_mse},{dlg_cos},{e['elapsed_sec']}")
+              
+    csv_path = RESULTS_DIR / "dp_epsilon_sweep.csv"
+    with open(csv_path, 'w') as f:
+        f.write("sigma,epsilon,noise_multiplier,CH1_AUC,CH2_AUC,Combined_AUC,Precision,Recall,F1,DLG_MSE,DLG_Cosine,Runtime\n")
+        f.write("\n".join(csv_rows) + "\n")
+    logger.info(f"Wrote {csv_path}")
 
 
 if __name__ == "__main__":

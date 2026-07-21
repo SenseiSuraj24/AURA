@@ -24,7 +24,14 @@ def run_two_pass_local_training(ae, attack_head, all_flows,
 
     # Pass 1: AE trains on benign flows only
     ae_loss_val = 0.0
-    step16_state = None
+    
+    # -----------------------------------------------------------
+    # Optimization-Horizon Export Policy
+    # Target optimization horizon: H = 32 optimizer steps.
+    # If local optimization reaches H, the Step32 snapshot is exported.
+    # Otherwise, the terminal local update is exported.
+    # -----------------------------------------------------------
+    ch1_export_state = None
     step_count = 0
     if len(benign_flows) > 0:
         actual_bs = min(batch_size, len(benign_flows)) if batch_size > 0 else len(benign_flows)
@@ -40,11 +47,11 @@ def run_two_pass_local_training(ae, attack_head, all_flows,
             ae_optimizer.step()
             ae_loss_val = loss.item()
             step_count += 1
-            if step_count == 16:
-                step16_state = {k: v.clone() for k, v in ae.state_dict().items()}
+            if step_count == 32:
+                ch1_export_state = {k: v.clone() for k, v in ae.state_dict().items()}
                 
-    if step16_state is None:
-        step16_state = {k: v.clone() for k, v in ae.state_dict().items()}
+    if ch1_export_state is None:
+        ch1_export_state = {k: v.clone() for k, v in ae.state_dict().items()}
 
     # Pass 2: inference-only z collection
     z_buffer = []
@@ -71,4 +78,4 @@ def run_two_pass_local_training(ae, attack_head, all_flows,
             loss.backward()
             head_optimizer.step()
 
-    return z_buffer, len(benign_flows), len(high_mse_flows), ae_loss_val, step16_state
+    return z_buffer, len(benign_flows), len(high_mse_flows), ae_loss_val, ch1_export_state

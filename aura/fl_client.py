@@ -491,7 +491,7 @@ class AURAFlowerClient(fl.client.Client):
             
         mse_split = getattr(cfg, 'CH2_MSE_SPLIT_THRESHOLD', cfg.MSE_THRESHOLD_HIGH)
         
-        z_buffer, n_benign, n_high_mse, last_loss, _ = run_two_pass_local_training(
+        z_buffer, n_benign, n_high_mse, last_loss, ch1_export_state = run_two_pass_local_training(
             ae, head, self.train_data,
             ae_optimizer, head_optimizer,
             mse_threshold=mse_split,
@@ -502,6 +502,10 @@ class AURAFlowerClient(fl.client.Client):
         assert n_benign > 0 or n_high_mse > 0, "FATAL: No flows processed in two-pass training"
         logger.info(f"Two-pass: benign={n_benign}, high_mse={n_high_mse}, z_buffer={sum(len(z) for z in z_buffer)}")
         
+        if ch1_export_state is not None:
+            ae.load_state_dict(ch1_export_state)
+        
+
         if self.dp_enabled and hasattr(ae, 'remove_hooks'):
             self.last_epsilon = privacy_engine.get_epsilon(delta=cfg.DP_DELTA)
             ae.remove_hooks()

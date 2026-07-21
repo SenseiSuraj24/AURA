@@ -503,7 +503,8 @@ def dc_fltrust_aggregate(
         ch2_raw_scores.append(ch2_raw)
 
         # ── Step 1: Explicit Boolean Predicates ──────────────────────────────────
-        ANTI_ALIGN_THRESHOLD = -0.1
+        # Calibrated using Mean - 6*std of honest distribution (0.65 - 6*0.088 = 0.12)
+        ANTI_ALIGN_THRESHOLD = 0.12
 
         if ch2_raw == 'WARMUP':
             is_warmup = True
@@ -609,6 +610,10 @@ def dc_fltrust_aggregate(
     return agg_ae, agg_head, ch1_scores, ch2_scores, classifications, exclusion_flags
 
 
+def get_federated_parameters(model: AURAModelBundle) -> List[torch.nn.Parameter]:
+    """Helper to return only the parameters that are actually federated (AE + Head)."""
+    return list(model.autoencoder.parameters()) + list(model.attack_head.parameters())
+
 def fltrust_aggregate(
     global_model:    AURAModelBundle,
     client_updates:  List[List[np.ndarray]],   # per-client list-of-arrays
@@ -658,9 +663,9 @@ def fltrust_aggregate(
     # ── Step 1: Compute server reference one-step update ───────────────────
     server_model = AURAModelBundle()
     # Load current global weights
-    global_param_list = [p.detach().cpu() for p in global_model.parameters()]
+    global_param_list = [p.detach().cpu() for p in get_federated_parameters(global_model)]
     with torch.no_grad():
-        for p, gp in zip(server_model.parameters(), global_param_list):
+        for p, gp in zip(get_federated_parameters(server_model), global_param_list):
             p.copy_(gp)
 
     # One gradient step on root data (autoencoder reconstruction loss)
@@ -678,7 +683,7 @@ def fltrust_aggregate(
     # Server delta (new weights − old weights), flattened
     server_delta = [
         (p.detach().cpu() - gp)
-        for p, gp in zip(server_model.parameters(), global_param_list)
+        for p, gp in zip(get_federated_parameters(server_model), global_param_list)
     ]
     server_vec = torch.cat([d.flatten() for d in server_delta])   # [D]
     server_norm = server_vec.norm()                                # scalar
@@ -687,7 +692,7 @@ def fltrust_aggregate(
     trust_scores: List[float] = []
     normalised_deltas: List[List[torch.Tensor]] = []   # per-client list of tensors
 
-    global_arrays = [p.detach().cpu().numpy() for p in global_model.parameters()]
+    global_arrays = [p.detach().cpu().numpy() for p in get_federated_parameters(global_model)]
 
     for client_arrays in client_updates:
         # Build per-layer delta (client_params − global_params)
@@ -1007,7 +1012,7 @@ class KrumFedAURA(FedAvg):
 
         # Update server's global model reference for next round
         with torch.no_grad():
-            for p, arr in zip(self._global_model.parameters(), aggregated):
+            for p, arr in zip(get_federated_parameters(self._global_model), aggregated):
                 p.copy_(torch.tensor(arr))
 
         # ── SHA-256 Hash (computed every round — clients verify weights) ──────
@@ -1129,7 +1134,7 @@ class KrumFedAURA(FedAvg):
         """Save the aggregated global model weights to disk."""
         model = AURAModelBundle()
         with torch.no_grad():
-            for p, arr in zip(model.parameters(), arrays):
+            for p, arr in zip(get_federated_parameters(model), arrays):
                 p.copy_(torch.tensor(arr))
         save_path = Path(cfg.MODELS_DIR) / f"global_model_{version_tag}.pth"
         torch.save(model.state_dict(), save_path)
@@ -1218,7 +1223,7 @@ def run_federation_simulation(merkle_tree=None, n_rounds: int = None,
 
     # Initialise with random global model
     global_model = AURAModelBundle()
-    global_params = [p.detach().cpu().numpy() for p in global_model.parameters()]
+    global_params = [p.detach().cpu().numpy() for p in get_federated_parameters(global_model)]
 
     round_results = []
 
