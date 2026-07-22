@@ -1,17 +1,27 @@
 # AURA: Autonomous Unsupervised Response Architecture
 
+This repository accompanies the AURA research project and contains the complete implementation, experimental pipeline, and evaluation framework used to produce the reported results.
+
 AURA is a federated, privacy-preserving, and Byzantine-robust AI system for critical infrastructure anomaly detection. 
 
 This repository contains the complete implementation, benchmarks, and attack simulations for the AURA research publication. It provides a dual-layer detection pipeline using a Flow Autoencoder (Statistical Tripwire) and a Spatio-Temporal Graph Neural Network (Contextual Validator), secured by a novel Dual-Channel FLTrust (DC-FLTrust) aggregation mechanism and Differential Privacy (DP-SGD).
+
+## Key Contributions
+
+*   **Dual-Channel FLTrust**
+*   **H=32 trajectory bottleneck**
+*   **DP-SGD integration**
+*   **Local STGNN reasoning**
+*   **Automated privacy evaluation pipeline**
 
 ## Overview
 
 Modern critical infrastructures require collaborative threat intelligence without exposing sensitive network traffic. Federated Learning (FL) enables this, but exposes the global model to Byzantine data poisoning and gradient leakage attacks. 
 
-AURA addresses this through three core contributions:
+AURA addresses this through three core design choices:
 1. **Dual-Channel FLTrust (DC-FLTrust)**: Upgrades the traditional FLTrust protocol by utilizing the Autoencoder's unoptimized `H=32` trajectory bottleneck to reliably segregate honest-but-anomalous nodes (under attack) from actively malicious Byzantine nodes attempting to poison the model.
-2. **Federated STGNNs**: Replaces traditional deep learning detection with GraphSAGE-inductive graph networks to capture the spatio-temporal dynamics of lateral movement.
-3. **Provable Privacy Defenses**: Defends against Deep Leakage from Gradients (DLG) and Membership Inference Attacks (MIA) natively through architectural bottlenecks, reinforced by Opacus DP-SGD ($\epsilon \le 1.0$).
+2. **Organization-local STGNN reasoning**: Replaces traditional deep learning detection with GraphSAGE-inductive graph networks to capture the spatio-temporal dynamics of lateral movement without federating the graph structure itself.
+3. **Empirical Privacy Evaluation**: Evaluates defenses against Deep Leakage from Gradients (DLG) and Membership Inference Attacks (MIA) natively through architectural bottlenecks, reinforced by Opacus DP-SGD ($\epsilon \le 1.0$).
 
 ---
 
@@ -19,6 +29,7 @@ AURA addresses this through three core contributions:
 
 The repository is modularized for research reproducibility:
 
+*   **`Reproducibility.md`**: Strict chronological instructions for reproducing all paper artifacts.
 *   **`aura/`**: Core system implementation. Contains the `models.py` (Flow Autoencoder, STGNN), federated learning logic (`fl_server.py`, `fl_client.py`), and the DC-FLTrust aggregation strategy (`dc_fltrust_aggregate.py`).
 *   **`aura_attacks/`**: Forensic privacy evaluation modules. Contains `gradient_inversion_attack.py` (DLG) and `mia_attack.py` (Shadow-model based MIA).
 *   **`scripts/`**: Orchestration and benchmarking scripts (`benchmark_byzantine.py`, `dp_epsilon_sweep.py`, `generate_publication_artifacts.py`, `train_explainer.py`).
@@ -32,7 +43,8 @@ The repository is modularized for research reproducibility:
 
 ## Installation
 
-Ensure you are using Python $\ge$ 3.10 (tested on 3.12). 
+Tested with Python 3.12
+Compatible with Python 3.10+
 
 ```bash
 # Clone the repository
@@ -90,11 +102,12 @@ python scripts/generate_publication_artifacts.py
 
 ## Results and Features
 
-Executing the pipeline populates the `results/` folder with complete forensic artifacts:
-*   **Byzantine Robustness**: DC-FLTrust successfully detects and isolates $100\%$ of malicious label-flipping clients while preserving the gradients of honest nodes under high-volume DDoS/Exploit attacks.
-*   **Privacy-Utility Tradeoff**: `dp_evaluation_table.md` summarizes the Opacus $\epsilon$ expenditure vs $F1$ utility across the sweep. Utility drops insignificantly ($F1 \approx 0.48$) while achieving mathematically rigorous privacy bounds ($\epsilon < 1.0$ at $\sigma=1.0$).
-*   **DLG Resistance**: `results/figures/sigma_vs_dlg_mse.png` visually verifies that gradient inversion completely fails to reconstruct client flow vectors, yielding random noise cosine similarities.
-*   **MIA Resistance**: Threshold and Shadow model attacks fail to cross the 0.55 AUROC threshold even in the $\sigma=0.0$ baseline, proving the `H=32` manifold bottleneck provides inherent privacy.
+Executing the pipeline populates the `results/` folder with complete forensic artifacts. Under the evaluated benchmark:
+
+*   **Byzantine Robustness**: DC-FLTrust successfully distinguished Byzantine and honest client updates, achieving perfect detection under the evaluated benchmark configuration.
+*   **Privacy-Utility Tradeoff**: Differential privacy reduced the privacy budget monotonically as $\sigma$ increased. Utility dropped insignificantly ($F1 \approx 0.48$) while achieving mathematically rigorous privacy bounds ($\epsilon < 1.0$ at $\sigma=1.0$).
+*   **DLG Resistance**: Gradient inversion reconstruction quality remained poor under the evaluated attack configuration.
+*   **MIA Resistance**: MIA achieved an AUC near random guessing under the evaluated settings, suggesting that the H=32 bottleneck contributes to reduced membership inference success under the evaluated threat model.
 *   **MITM (Man-in-the-Middle)**: Simulated interception correctly triggers SHA-256 Merkle root validation failures during global broadcasting.
 
 ---
@@ -112,10 +125,10 @@ Executing the pipeline populates the `results/` folder with complete forensic ar
 If you build upon this work, please cite the repository:
 
 ```bibtex
-@inproceedings{AURA2026,
-  title={AURA: Autonomous Unsupervised Response Architecture for Federated Critical Infrastructure},
-  author={[Author Placeholder]},
-  booktitle={[Conference/Journal Placeholder]},
-  year={2026}
+@misc{AURA2026,
+  title={AURA: Autonomous Unsupervised Response Architecture},
+  author={...},
+  year={2026},
+  note={GitHub repository}
 }
 ```
