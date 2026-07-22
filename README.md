@@ -1,4 +1,4 @@
-# AURA: Autonomous Unsupervised Response Architecture
+# AURA: Adaptive Unified Resilient Architecture
 
 This repository accompanies the AURA research project and contains the complete implementation, experimental pipeline, and evaluation framework used to produce the reported results.
 
