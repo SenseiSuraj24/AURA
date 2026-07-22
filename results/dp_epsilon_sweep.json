@@ -1,0 +1,703 @@
+{
+  "limitations": [
+    "epsilon is per-round local-training budget; NOT composed across rounds (PrivacyEngine is recreated fresh each round in fl_client.py by design).",
+    "gradient_inversion_attack.py results are not sigma-sensitive in the current codebase \u2014 see privacy_attacks.gradient_inversion.note per entry."
+  ],
+  "sweep": [
+    {
+      "sigma": 0.0,
+      "n_rounds": 3,
+      "detection_metrics": {
+        "Precision": 0.588589,
+        "Recall": 0.378044,
+        "F1": 0.460387,
+        "Macro-F1": 0.696808,
+        "FPR": 0.040922,
+        "ROC-AUC": 0.80301,
+        "PR-AUC": 0.45496,
+        "AUC_Approximate": false
+      },
+      "round_records": [
+        {
+          "round": 1,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.0
+            }
+          ],
+          "trust_scores": [
+            0.3521,
+            0.3339,
+            0.3368,
+            0.2814,
+            0.2797
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 2,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.0
+            }
+          ],
+          "trust_scores": [
+            0.3726,
+            0.396,
+            0.4172,
+            0.3295,
+            0.3514
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 3,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.0
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.0
+            }
+          ],
+          "trust_scores": [
+            0.4172,
+            0.3844,
+            0.4227,
+            0.3471,
+            0.3366
+          ],
+          "flagged_indices": []
+        }
+      ],
+      "elapsed_sec": 107.1,
+      "privacy_attacks": {
+        "mia": {
+          "ran": true,
+          "returncode": 0,
+          "auc": 0.5375,
+          "stdout_tail": " [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5129  Acc=0.5025  Threshold=0.009893\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4871  Acc=0.5000\n\n  Verdict for university: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.513)\n\n------------------------------------------------------------\n  Client: org_isp\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5008  Acc=0.5050  Threshold=0.009157\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4992  Acc=0.5000\n\n  Verdict for isp: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.501)\n\n------------------------------------------------------------\n  Client: org_retail\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5189  Acc=0.5200  Threshold=0.008881\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4811  Acc=0.5000\n\n  Verdict for retail: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.519)\n\n============================================================\n  SUMMARY \u00e2\u20ac\u201d Membership Inference Attack Results\n============================================================\n  Client          Threshold AUC   Shadow AUC   Best AUC  Verdict\n  -------------- -------------- ------------ ----------  ------------------\n  hospital               0.4503       0.4503     0.4503  \u00e2\u0153\u2026 PRIVATE\n  bank                   0.4625       0.5375     0.5375  \u00e2\u0153\u2026 PRIVATE\n  university             0.5129       0.4871     0.5129  \u00e2\u0153\u2026 PRIVATE\n  isp                    0.5008       0.4992     0.5008  \u00e2\u0153\u2026 PRIVATE\n  retail                 0.5189       0.4811     0.5189  \u00e2\u0153\u2026 PRIVATE\n\n  Overall worst-case AUC: 0.5375  \u00e2\u2020\u2019  \u00e2\u0153\u2026 PRIVATE\n  Target for paper: AUC \u00e2\u2030\u00a4 0.55 (indistinguishable from random guessing)\n============================================================\n\n",
+          "stderr_tail": "6-07-22 11:27:11,228 [INFO] IsolationForest removed 12904 suspicious rows. Clean baseline size: 632295 rows.\n2026-07-22 11:27:11,305 [INFO] MinMaxScaler fitted strictly on chronologically isolated train split (505836 rows).\n2026-07-22 11:27:11,368 [INFO] Loading NF-UNSW-NB15-v3.csv \u00e2\u20ac\u00a6\n2026-07-22 11:27:21,650 [INFO] [org_hospital_1] Partition 0 (hospital) ready: train=150740 val=37685 features=47\n2026-07-22 11:27:21,721 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:27:21,892 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:27:22,042 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:27:22,194 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:27:22,359 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:27:22,509 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n"
+        },
+        "gradient_inversion": {
+          "ran": true,
+          "not_sigma_sensitive": false,
+          "returncode": 0,
+          "metrics": {
+            "dlg_loss": 0.0022575571201741695,
+            "mse": 1.2488068342208862,
+            "cosine_similarity": -0.0808698907494545,
+            "reconstruction_success": true,
+            "nan_present": false,
+            "inf_present": false
+          }
+        },
+        "archived_checkpoint": "D:\\NeuDocuments\\Hackathon\\NexJam\\AURA-1\\saved_models\\dp_sweep\\sigma_0.00_autoencoder.pth"
+      }
+    },
+    {
+      "sigma": 0.5,
+      "n_rounds": 3,
+      "detection_metrics": {
+        "Precision": 0.601042,
+        "Recall": 0.399874,
+        "F1": 0.480242,
+        "Macro-F1": 0.707457,
+        "FPR": 0.041105,
+        "ROC-AUC": 0.834378,
+        "PR-AUC": 0.483988,
+        "AUC_Approximate": false
+      },
+      "round_records": [
+        {
+          "round": 1,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 4.811053795680485
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 6.297962319416681
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 5.30030514459185
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 5.256600129077607
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 5.201060135968843
+            }
+          ],
+          "trust_scores": [
+            0.0754,
+            0.0826,
+            0.0703,
+            0.0691,
+            0.0556
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 2,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 4.910821057570388
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 6.483584513252629
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 5.451075878710309
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 5.388885765768147
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 5.317786737968332
+            }
+          ],
+          "trust_scores": [
+            0.0689,
+            0.0546,
+            0.1083,
+            0.0533,
+            0.0802
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 3,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 4.922949684328087
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 6.508334139097423
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 5.468963931910805
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 5.400289699965607
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 5.321743571934416
+            }
+          ],
+          "trust_scores": [
+            0.0589,
+            0.0646,
+            0.0671,
+            0.0538,
+            0.0729
+          ],
+          "flagged_indices": []
+        }
+      ],
+      "elapsed_sec": 190.1,
+      "privacy_attacks": {
+        "mia": {
+          "ran": true,
+          "returncode": 0,
+          "auc": 0.5375,
+          "stdout_tail": " [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5129  Acc=0.5025  Threshold=0.009893\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4871  Acc=0.5000\n\n  Verdict for university: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.513)\n\n------------------------------------------------------------\n  Client: org_isp\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5008  Acc=0.5050  Threshold=0.009157\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4992  Acc=0.5000\n\n  Verdict for isp: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.501)\n\n------------------------------------------------------------\n  Client: org_retail\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5189  Acc=0.5200  Threshold=0.008881\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4811  Acc=0.5000\n\n  Verdict for retail: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.519)\n\n============================================================\n  SUMMARY \u00e2\u20ac\u201d Membership Inference Attack Results\n============================================================\n  Client          Threshold AUC   Shadow AUC   Best AUC  Verdict\n  -------------- -------------- ------------ ----------  ------------------\n  hospital               0.4503       0.4503     0.4503  \u00e2\u0153\u2026 PRIVATE\n  bank                   0.4625       0.5375     0.5375  \u00e2\u0153\u2026 PRIVATE\n  university             0.5129       0.4871     0.5129  \u00e2\u0153\u2026 PRIVATE\n  isp                    0.5008       0.4992     0.5008  \u00e2\u0153\u2026 PRIVATE\n  retail                 0.5189       0.4811     0.5189  \u00e2\u0153\u2026 PRIVATE\n\n  Overall worst-case AUC: 0.5375  \u00e2\u2020\u2019  \u00e2\u0153\u2026 PRIVATE\n  Target for paper: AUC \u00e2\u2030\u00a4 0.55 (indistinguishable from random guessing)\n============================================================\n\n",
+          "stderr_tail": "6-07-22 11:37:55,644 [INFO] IsolationForest removed 12904 suspicious rows. Clean baseline size: 632295 rows.\n2026-07-22 11:37:55,717 [INFO] MinMaxScaler fitted strictly on chronologically isolated train split (505836 rows).\n2026-07-22 11:37:55,782 [INFO] Loading NF-UNSW-NB15-v3.csv \u00e2\u20ac\u00a6\n2026-07-22 11:38:06,042 [INFO] [org_hospital_1] Partition 0 (hospital) ready: train=150740 val=37685 features=47\n2026-07-22 11:38:06,122 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:38:06,344 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:38:06,492 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:38:06,634 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:38:06,755 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:38:06,873 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n"
+        },
+        "gradient_inversion": {
+          "ran": true,
+          "not_sigma_sensitive": false,
+          "returncode": 0,
+          "metrics": {
+            "dlg_loss": 0.0012415425153449178,
+            "mse": 0.7512561678886414,
+            "cosine_similarity": 0.08452984690666199,
+            "reconstruction_success": true,
+            "nan_present": false,
+            "inf_present": false
+          }
+        },
+        "archived_checkpoint": "D:\\NeuDocuments\\Hackathon\\NexJam\\AURA-1\\saved_models\\dp_sweep\\sigma_0.50_autoencoder.pth"
+      }
+    },
+    {
+      "sigma": 1.0,
+      "n_rounds": 3,
+      "detection_metrics": {
+        "Precision": 0.600143,
+        "Recall": 0.397431,
+        "F1": 0.478191,
+        "Macro-F1": 0.706371,
+        "FPR": 0.041007,
+        "ROC-AUC": 0.835667,
+        "PR-AUC": 0.483623,
+        "AUC_Approximate": false
+      },
+      "round_records": [
+        {
+          "round": 1,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.7486317113022901
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.9476987620193056
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.8450230412902445
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.82034889850237
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.7920035743430077
+            }
+          ],
+          "trust_scores": [
+            0.0464,
+            0.0397,
+            0.0679,
+            0.0629,
+            0.0651
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 2,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.7515873539973644
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.960397568062358
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.8489870492104354
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.8363813129852793
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.8023417582934258
+            }
+          ],
+          "trust_scores": [
+            0.0384,
+            0.0539,
+            0.0541,
+            0.0409,
+            0.0397
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 3,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.7519610559473163
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.9619532465467574
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.8494573552348649
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.8377876651329029
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.8026982473951644
+            }
+          ],
+          "trust_scores": [
+            0.0371,
+            0.0304,
+            0.061,
+            0.0307,
+            0.0144
+          ],
+          "flagged_indices": []
+        }
+      ],
+      "elapsed_sec": 167.1,
+      "privacy_attacks": {
+        "mia": {
+          "ran": true,
+          "returncode": 0,
+          "auc": 0.5375,
+          "stdout_tail": " [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5129  Acc=0.5025  Threshold=0.009893\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4871  Acc=0.5000\n\n  Verdict for university: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.513)\n\n------------------------------------------------------------\n  Client: org_isp\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5008  Acc=0.5050  Threshold=0.009157\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4992  Acc=0.5000\n\n  Verdict for isp: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.501)\n\n------------------------------------------------------------\n  Client: org_retail\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5189  Acc=0.5200  Threshold=0.008881\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4811  Acc=0.5000\n\n  Verdict for retail: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.519)\n\n============================================================\n  SUMMARY \u00e2\u20ac\u201d Membership Inference Attack Results\n============================================================\n  Client          Threshold AUC   Shadow AUC   Best AUC  Verdict\n  -------------- -------------- ------------ ----------  ------------------\n  hospital               0.4503       0.4503     0.4503  \u00e2\u0153\u2026 PRIVATE\n  bank                   0.4625       0.5375     0.5375  \u00e2\u0153\u2026 PRIVATE\n  university             0.5129       0.4871     0.5129  \u00e2\u0153\u2026 PRIVATE\n  isp                    0.5008       0.4992     0.5008  \u00e2\u0153\u2026 PRIVATE\n  retail                 0.5189       0.4811     0.5189  \u00e2\u0153\u2026 PRIVATE\n\n  Overall worst-case AUC: 0.5375  \u00e2\u2020\u2019  \u00e2\u0153\u2026 PRIVATE\n  Target for paper: AUC \u00e2\u2030\u00a4 0.55 (indistinguishable from random guessing)\n============================================================\n\n",
+          "stderr_tail": "6-07-22 11:46:27,952 [INFO] IsolationForest removed 12904 suspicious rows. Clean baseline size: 632295 rows.\n2026-07-22 11:46:28,023 [INFO] MinMaxScaler fitted strictly on chronologically isolated train split (505836 rows).\n2026-07-22 11:46:28,105 [INFO] Loading NF-UNSW-NB15-v3.csv \u00e2\u20ac\u00a6\n2026-07-22 11:46:38,349 [INFO] [org_hospital_1] Partition 0 (hospital) ready: train=150740 val=37685 features=47\n2026-07-22 11:46:38,428 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:46:38,581 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:46:38,708 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:46:38,841 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:46:38,963 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:46:39,083 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n"
+        },
+        "gradient_inversion": {
+          "ran": true,
+          "not_sigma_sensitive": false,
+          "returncode": 0,
+          "metrics": {
+            "dlg_loss": 0.0012481771409511566,
+            "mse": 0.889205276966095,
+            "cosine_similarity": 0.0032948595471680164,
+            "reconstruction_success": true,
+            "nan_present": false,
+            "inf_present": false
+          }
+        },
+        "archived_checkpoint": "D:\\NeuDocuments\\Hackathon\\NexJam\\AURA-1\\saved_models\\dp_sweep\\sigma_1.00_autoencoder.pth"
+      }
+    },
+    {
+      "sigma": 1.5,
+      "n_rounds": 3,
+      "detection_metrics": {
+        "Precision": 0.605519,
+        "Recall": 0.402947,
+        "F1": 0.483888,
+        "Macro-F1": 0.709506,
+        "FPR": 0.040653,
+        "ROC-AUC": 0.833825,
+        "PR-AUC": 0.487174,
+        "AUC_Approximate": false
+      },
+      "round_records": [
+        {
+          "round": 1,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.2772910121101053
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.36272592519153957
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.30567141491525596
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.30509496400573355
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.298914874759115
+            }
+          ],
+          "trust_scores": [
+            0.0446,
+            0.0438,
+            0.0353,
+            0.0437,
+            0.0412
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 2,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.2794782768389697
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.3682525880704294
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.3087420903619198
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.30780025194334015
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.30269713779598945
+            }
+          ],
+          "trust_scores": [
+            0.0316,
+            0.0668,
+            0.0618,
+            0.0319,
+            0.046
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 3,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.2796727003704243
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.3686091469658416
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.3089434461289141
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.30793780895711675
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.30269713779598945
+            }
+          ],
+          "trust_scores": [
+            0.0088,
+            0.0468,
+            0.0394,
+            0.024,
+            0.0283
+          ],
+          "flagged_indices": []
+        }
+      ],
+      "elapsed_sec": 169.4,
+      "privacy_attacks": {
+        "mia": {
+          "ran": true,
+          "returncode": 0,
+          "auc": 0.5375,
+          "stdout_tail": " [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5129  Acc=0.5025  Threshold=0.009893\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4871  Acc=0.5000\n\n  Verdict for university: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.513)\n\n------------------------------------------------------------\n  Client: org_isp\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5008  Acc=0.5050  Threshold=0.009157\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4992  Acc=0.5000\n\n  Verdict for isp: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.501)\n\n------------------------------------------------------------\n  Client: org_retail\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5189  Acc=0.5200  Threshold=0.008881\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4811  Acc=0.5000\n\n  Verdict for retail: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.519)\n\n============================================================\n  SUMMARY \u00e2\u20ac\u201d Membership Inference Attack Results\n============================================================\n  Client          Threshold AUC   Shadow AUC   Best AUC  Verdict\n  -------------- -------------- ------------ ----------  ------------------\n  hospital               0.4503       0.4503     0.4503  \u00e2\u0153\u2026 PRIVATE\n  bank                   0.4625       0.5375     0.5375  \u00e2\u0153\u2026 PRIVATE\n  university             0.5129       0.4871     0.5129  \u00e2\u0153\u2026 PRIVATE\n  isp                    0.5008       0.4992     0.5008  \u00e2\u0153\u2026 PRIVATE\n  retail                 0.5189       0.4811     0.5189  \u00e2\u0153\u2026 PRIVATE\n\n  Overall worst-case AUC: 0.5375  \u00e2\u2020\u2019  \u00e2\u0153\u2026 PRIVATE\n  Target for paper: AUC \u00e2\u2030\u00a4 0.55 (indistinguishable from random guessing)\n============================================================\n\n",
+          "stderr_tail": "6-07-22 11:54:53,984 [INFO] IsolationForest removed 12904 suspicious rows. Clean baseline size: 632295 rows.\n2026-07-22 11:54:54,056 [INFO] MinMaxScaler fitted strictly on chronologically isolated train split (505836 rows).\n2026-07-22 11:54:54,130 [INFO] Loading NF-UNSW-NB15-v3.csv \u00e2\u20ac\u00a6\n2026-07-22 11:55:04,287 [INFO] [org_hospital_1] Partition 0 (hospital) ready: train=150740 val=37685 features=47\n2026-07-22 11:55:04,349 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:55:04,564 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:55:04,728 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:55:04,886 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:55:05,043 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 11:55:05,188 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n"
+        },
+        "gradient_inversion": {
+          "ran": true,
+          "not_sigma_sensitive": false,
+          "returncode": 0,
+          "metrics": {
+            "dlg_loss": 0.0011877311626449227,
+            "mse": 0.79981929063797,
+            "cosine_similarity": 0.05213592201471329,
+            "reconstruction_success": true,
+            "nan_present": false,
+            "inf_present": false
+          }
+        },
+        "archived_checkpoint": "D:\\NeuDocuments\\Hackathon\\NexJam\\AURA-1\\saved_models\\dp_sweep\\sigma_1.50_autoencoder.pth"
+      }
+    },
+    {
+      "sigma": 2.0,
+      "n_rounds": 3,
+      "detection_metrics": {
+        "Precision": 0.600625,
+        "Recall": 0.393727,
+        "F1": 0.475651,
+        "Macro-F1": 0.70509,
+        "FPR": 0.040543,
+        "ROC-AUC": 0.825676,
+        "PR-AUC": 0.477575,
+        "AUC_Approximate": false
+      },
+      "round_records": [
+        {
+          "round": 1,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.14417127536710622
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.19247366280757766
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.15846865515733347
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.15790773310017384
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.15513440107045062
+            }
+          ],
+          "trust_scores": [
+            0.03,
+            0.0303,
+            0.0485,
+            0.0344,
+            0.0446
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 2,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.14596296003171452
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.1977506493520394
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.1610829900073979
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.16024078961998472
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.15750468214450727
+            }
+          ],
+          "trust_scores": [
+            0.0446,
+            0.0383,
+            0.0584,
+            0.0113,
+            0.0344
+          ],
+          "flagged_indices": []
+        },
+        {
+          "round": 3,
+          "per_client_epsilon": [
+            {
+              "client_id": "org_hospital_1",
+              "dp_epsilon_ae": 0.14625806103529707
+            },
+            {
+              "client_id": "org_bank_1",
+              "dp_epsilon_ae": 0.19856692660092357
+            },
+            {
+              "client_id": "org_university_1",
+              "dp_epsilon_ae": 0.16149577972056595
+            },
+            {
+              "client_id": "org_isp_1",
+              "dp_epsilon_ae": 0.16049075996139303
+            },
+            {
+              "client_id": "org_retail_1",
+              "dp_epsilon_ae": 0.15767101765847616
+            }
+          ],
+          "trust_scores": [
+            0.0094,
+            0.0236,
+            0.0118,
+            0.038,
+            0.0142
+          ],
+          "flagged_indices": []
+        }
+      ],
+      "elapsed_sec": 167.7,
+      "privacy_attacks": {
+        "mia": {
+          "ran": true,
+          "returncode": 0,
+          "auc": 0.5375,
+          "stdout_tail": " [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5129  Acc=0.5025  Threshold=0.009893\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4871  Acc=0.5000\n\n  Verdict for university: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.513)\n\n------------------------------------------------------------\n  Client: org_isp\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5008  Acc=0.5050  Threshold=0.009157\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4992  Acc=0.5000\n\n  Verdict for isp: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.501)\n\n------------------------------------------------------------\n  Client: org_retail\n------------------------------------------------------------\n  Members (training rows):     200\n  Non-members (held-out rows): 200\n\n  [Attack 1 \u00e2\u20ac\u201d Threshold MIA]\n    AUC=0.5189  Acc=0.5200  Threshold=0.008881\n\n  [Attack 2 \u00e2\u20ac\u201d Shadow-model MIA (Shokri et al. 2017)]\n  Training 6 shadow AEs ...\n    AUC=0.4811  Acc=0.5000\n\n  Verdict for retail: \u00e2\u0153\u2026 PRIVATE  (best AUC=0.519)\n\n============================================================\n  SUMMARY \u00e2\u20ac\u201d Membership Inference Attack Results\n============================================================\n  Client          Threshold AUC   Shadow AUC   Best AUC  Verdict\n  -------------- -------------- ------------ ----------  ------------------\n  hospital               0.4503       0.4503     0.4503  \u00e2\u0153\u2026 PRIVATE\n  bank                   0.4625       0.5375     0.5375  \u00e2\u0153\u2026 PRIVATE\n  university             0.5129       0.4871     0.5129  \u00e2\u0153\u2026 PRIVATE\n  isp                    0.5008       0.4992     0.5008  \u00e2\u0153\u2026 PRIVATE\n  retail                 0.5189       0.4811     0.5189  \u00e2\u0153\u2026 PRIVATE\n\n  Overall worst-case AUC: 0.5375  \u00e2\u2020\u2019  \u00e2\u0153\u2026 PRIVATE\n  Target for paper: AUC \u00e2\u2030\u00a4 0.55 (indistinguishable from random guessing)\n============================================================\n\n",
+          "stderr_tail": "6-07-22 12:03:21,446 [INFO] IsolationForest removed 12904 suspicious rows. Clean baseline size: 632295 rows.\n2026-07-22 12:03:21,519 [INFO] MinMaxScaler fitted strictly on chronologically isolated train split (505836 rows).\n2026-07-22 12:03:21,615 [INFO] Loading NF-UNSW-NB15-v3.csv \u00e2\u20ac\u00a6\n2026-07-22 12:03:32,039 [INFO] [org_hospital_1] Partition 0 (hospital) ready: train=150740 val=37685 features=47\n2026-07-22 12:03:32,117 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 12:03:32,302 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 12:03:32,455 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 12:03:32,589 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 12:03:32,728 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n2026-07-22 12:03:32,858 [INFO] FlowAutoencoder: 47\u00e2\u2020\u2019[32, 24]\u00e2\u2020\u201916\u00e2\u2020\u2019[24, 32]\u00e2\u2020\u201947  |  params=5,487\n"
+        },
+        "gradient_inversion": {
+          "ran": true,
+          "not_sigma_sensitive": false,
+          "returncode": 0,
+          "metrics": {
+            "dlg_loss": 0.003257761476561427,
+            "mse": 0.7512565851211548,
+            "cosine_similarity": 0.08452963083982468,
+            "reconstruction_success": true,
+            "nan_present": false,
+            "inf_present": false
+          }
+        },
+        "archived_checkpoint": "D:\\NeuDocuments\\Hackathon\\NexJam\\AURA-1\\saved_models\\dp_sweep\\sigma_2.00_autoencoder.pth"
+      }
+    }
+  ]
+}
