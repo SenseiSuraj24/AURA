@@ -1,0 +1,8 @@
+{
+    "dlg_loss": 0.00062767748022452,
+    "mse": 0.9447375535964966,
+    "cosine_similarity": 0.004549363162368536,
+    "reconstruction_success": true,
+    "nan_present": false,
+    "inf_present": false
+}

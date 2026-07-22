@@ -112,6 +112,21 @@ def run_federation_at_sigma(sigma: float, n_rounds: int, n_clients: int,
         ))
 
     global_model = AURAModelBundle().to(device)
+    bundle_path = cfg.MODELS_DIR / 'aura_bundle.pth'
+    if not bundle_path.exists():
+        raise FileNotFoundError(f"Pretrained bundle not found at {bundle_path}")
+    state = torch.load(bundle_path, map_location=device, weights_only=True)
+    incompatible_keys = global_model.load_state_dict(state, strict=False)
+    if incompatible_keys.missing_keys or incompatible_keys.unexpected_keys:
+        logger.warning(f"[INIT] Checkpoint mismatches found in {bundle_path}:")
+        if incompatible_keys.missing_keys:
+            logger.warning(f"       Missing keys: {incompatible_keys.missing_keys}")
+        if incompatible_keys.unexpected_keys:
+            logger.warning(f"       Unexpected keys: {incompatible_keys.unexpected_keys}")
+        ae_missing = [k for k in incompatible_keys.missing_keys if k.startswith('autoencoder')]
+        if ae_missing:
+            raise RuntimeError(f"Architecture mismatch! Missing Autoencoder keys: {ae_missing}")
+    global_model.autoencoder.eval()
     root_data, _ = _build_root_dataset(scaler)
 
     round_records = []
@@ -129,7 +144,6 @@ def run_federation_at_sigma(sigma: float, n_rounds: int, n_clients: int,
             per_client_eps.append({
                 "client_id": client.client_id,
                 "dp_epsilon_ae": client.last_epsilon,
-                "dp_epsilon_head": client.last_epsilon_head,
             })
 
         aggregated, trust_scores, flagged = fltrust_aggregate(
@@ -163,9 +177,7 @@ def run_federation_at_sigma(sigma: float, n_rounds: int, n_clients: int,
                 'train_data': clients[0].train_data.cpu()
             }
             
-        with torch.no_grad():
-            for p, arr in zip(global_model.parameters(), aggregated):
-                p.copy_(torch.tensor(arr, device=device))
+        ndarrays_to_model(global_model, aggregated)
 
         round_records.append({
             "round": rnd,
@@ -220,7 +232,10 @@ def run_privacy_attacks(sigma: float, global_model: AURAModelBundle) -> dict:
             [sys.executable, "aura_attacks/mia_attack.py"],
             cwd=str(AURA_ROOT), capture_output=True, text=True, timeout=600,
         )
-        mia_result = {"ran": True, "returncode": proc.returncode,
+        import re
+        match = re.search(r"Overall worst-case AUC:\s+([\d.]+)", proc.stdout)
+        mia_auc = float(match.group(1)) if match else -1.0
+        mia_result = {"ran": True, "returncode": proc.returncode, "auc": mia_auc,
                        "stdout_tail": proc.stdout[-2000:], "stderr_tail": proc.stderr[-1000:]}
     except Exception as e:
         mia_result = {"ran": False, "error": str(e)}
@@ -334,15 +349,16 @@ def main():
         eps0 = last_round["per_client_epsilon"][0]["dp_epsilon_ae"]
         dlg_cos = e.get("privacy_attacks", {}).get("gradient_inversion", {}).get("metrics", {}).get("cosine_similarity", -1.0)
         dlg_mse = e.get("privacy_attacks", {}).get("gradient_inversion", {}).get("metrics", {}).get("mse", -1.0)
+        mia_auc = e.get("privacy_attacks", {}).get("mia", {}).get("auc", -1.0)
         
         print(f"{e['sigma']:>6} | {e['detection_metrics']['F1']:>7} | "
               f"{e['detection_metrics']['FPR']:>7} | {eps0:>28.4f} | {dlg_cos:>12.4f}")
               
-        csv_rows.append(f"{e['sigma']},{eps0},{e['sigma']},{e['detection_metrics']['AUC']},0.0,0.0,{e['detection_metrics']['Precision']},{e['detection_metrics']['Recall']},{e['detection_metrics']['F1']},{dlg_mse},{dlg_cos},{e['elapsed_sec']}")
+        csv_rows.append(f"{e['sigma']},{eps0},{e['sigma']},{e['detection_metrics']['ROC-AUC']},0.0,0.0,{e['detection_metrics']['Precision']},{e['detection_metrics']['Recall']},{e['detection_metrics']['F1']},{dlg_mse},{dlg_cos},{mia_auc},{e['elapsed_sec']}")
               
     csv_path = RESULTS_DIR / "dp_epsilon_sweep.csv"
     with open(csv_path, 'w') as f:
-        f.write("sigma,epsilon,noise_multiplier,CH1_AUC,CH2_AUC,Combined_AUC,Precision,Recall,F1,DLG_MSE,DLG_Cosine,Runtime\n")
+        f.write("sigma,epsilon,noise_multiplier,CH1_AUC,CH2_AUC,Combined_AUC,Precision,Recall,F1,DLG_MSE,DLG_Cosine,MIA_AUC,Runtime\n")
         f.write("\n".join(csv_rows) + "\n")
     logger.info(f"Wrote {csv_path}")
 

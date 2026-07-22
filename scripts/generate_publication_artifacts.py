@@ -28,6 +28,7 @@ def generate_plots():
         # Privacy attacks
         dlg_cos = e.get("privacy_attacks", {}).get("gradient_inversion", {}).get("metrics", {}).get("cosine_similarity", -1.0)
         dlg_mse = e.get("privacy_attacks", {}).get("gradient_inversion", {}).get("metrics", {}).get("mse", -1.0)
+        mia_auc = e.get("privacy_attacks", {}).get("mia", {}).get("auc", -1.0)
         
         # Fix missing ROC-AUC fallback
         roc_auc = metrics.get("ROC-AUC", 0.0)
@@ -46,6 +47,7 @@ def generate_plots():
             "F1": metrics.get("F1", 0.0),
             "DLG_MSE": dlg_mse,
             "DLG_Cosine": dlg_cos,
+            "MIA_AUC": mia_auc,
             "Runtime": e.get("elapsed_sec", 0.0)
         })
         

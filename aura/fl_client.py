@@ -476,7 +476,7 @@ class AURAFlowerClient(fl.client.Client):
         privacy_engine = None
         if self.dp_enabled and OPACUS_AVAILABLE:
             from opacus import PrivacyEngine
-            privacy_engine = PrivacyEngine()
+            privacy_engine = PrivacyEngine(accountant='rdp')
             
             loader = torch.utils.data.DataLoader(
                 torch.utils.data.TensorDataset(self.train_data), batch_size=256
