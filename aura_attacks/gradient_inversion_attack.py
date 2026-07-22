@@ -166,7 +166,7 @@ def invert_head_exact(global_ae, global_head, true_head_delta, batch_size, steps
         if loss < best_loss or best_dummy is None:
             best_loss = loss
             best_dummy = dummy_x.detach().clone()
-    return best_dummy
+    return best_dummy, best_loss
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         # Default fallback, usually 150740 for full dataset head batch
         batch_size = 150740
 
-    x_hat = invert_head_exact(
+    x_hat, best_loss = invert_head_exact(
         global_ae, 
         global_head, 
         true_head_delta, 
@@ -232,7 +232,7 @@ if __name__ == "__main__":
         cos = F.cosine_similarity(x_hat.flatten(), true_data.flatten(), dim=0).item()
 
     out = {
-        "dlg_loss": 0.0,
+        "dlg_loss": best_loss,
         "mse": mse,
         "cosine_similarity": cos,
         "reconstruction_success": not torch.isnan(x_hat).any().item(),

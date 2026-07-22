@@ -77,7 +77,11 @@ def _train_shadow(data, epochs=30):
     fn = nn.MSELoss()
     m.train()
     for _ in range(epochs):
-        opt.zero_grad(); fn(m(data), data).backward(); opt.step()
+        opt.zero_grad()
+        out = m(data)
+        recon = out[0] if isinstance(out, tuple) else out
+        fn(recon, data).backward()
+        opt.step()
     m.eval()
     return m
 
