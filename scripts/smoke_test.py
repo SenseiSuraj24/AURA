@@ -140,6 +140,27 @@ def dc_fltrust_safeguards():
     assert out[5][4], "reversed client was not excluded during warmup"
     assert not any(out[5][:4]), "honest client was excluded during warmup"
 
+    # Each channel gates only its own model
+    root_head = {"w": torch.randn(50) * 0.01}
+    ok_head = [{"w": root_head["w"] + torch.randn(50) * 0.002} for _ in range(5)]
+    flipped_head = ok_head[:4] + [{"w": -ok_head[4]["w"]}]
+    both = [{"w": root["w"] + torch.randn(200) * 0.01} for _ in range(5)]
+
+    def run(ae_list, head_list, **kw):
+        return dc_fltrust_aggregate(ae_list, head_list, root, root_head, [1] * 5, ch2_warmup_rounds=0, current_round=1, **kw)
+
+    out = run(both, flipped_head)
+    assert out[5][4], "flipped head was not flagged"
+    assert torch.allclose(out[0]["w"], run(both, ok_head)[0]["w"]), "head score changed the AE aggregate"
+    legacy = run(both, flipped_head, joint_exclusion=True)
+    assert not torch.allclose(out[0]["w"], legacy[0]["w"]), "joint_exclusion did not restore the old rule"
+    assert torch.allclose(out[1]["w"], legacy[1]["w"]), "flipped head reached the head aggregate"
+
+    flipped_ae = both[:4] + [{"w": -root["w"]}]
+    out = run(flipped_ae, ok_head)
+    assert out[5][4], "flipped AE was not flagged"
+    assert torch.allclose(out[1]["w"], run(both, ok_head)[1]["w"]), "AE score changed the head aggregate"
+
 
 def client_and_root_share_a_recipe():
     import copy
@@ -210,7 +231,7 @@ def main():
     check("config imports on a fresh clone", fresh_clone_config_import)
     check("core modules import", import_core_modules)
     check("synthetic models/detector/DC-FLTrust pipeline", synthetic_pipeline)
-    check("DC-FLTrust bounds scaled updates and excludes during warmup", dc_fltrust_safeguards)
+    check("DC-FLTrust bounds scaled updates, excludes during warmup, gates each model by its own channel", dc_fltrust_safeguards)
     check("canonical split is leakage-free and fraction-invariant", split_is_leakage_free)
     check("model artefacts match the manifest", manifest_matches)
     check("client and server root follow the same training recipe", client_and_root_share_a_recipe)

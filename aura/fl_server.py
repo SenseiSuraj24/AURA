@@ -401,17 +401,24 @@ def dc_fltrust_aggregate(
     attack_ref_buffer = None,
     current_round: int = 0,
     reference_attack_head = None,
-    ch1_threshold: float = cfg.FLTRUST_CH1_THRESHOLD
+    ch1_threshold: float = cfg.FLTRUST_CH1_THRESHOLD,
+    joint_exclusion: bool = False
 ) -> tuple:
     """
     Dual-channel FLTrust aggregation.
-    
+
     Channel 1: cosine similarity of AE delta vs root AE delta
     Channel 2: cosine similarity of AttackHead delta vs root head delta
                Only active after ch2_warmup_rounds per client
-    
-    Returns: (aggregated_ae_weights, aggregated_head_weights, 
-               ch1_scores, ch2_scores, classifications)
+
+    Each channel gates only its own model. An organisation with no attacks scores
+    low on channel 2, so letting that remove its AE update drops honest clients.
+    joint_exclusion=True restores the old rule (either channel removes both updates)
+    for reproducing earlier experiments.
+
+    Returns: (aggregated_ae_weights, aggregated_head_weights,
+               ch1_scores, ch2_scores, classifications, exclusion_flags)
+    exclusion_flags marks a client flagged on either channel.
     """
     
     def flatten(delta: dict) -> torch.Tensor:
@@ -450,6 +457,8 @@ def dc_fltrust_aggregate(
     ch2_raw_scores = []   # Signed cosine for ch2 (used in classification only)
     classifications = []
     exclusion_flags = []
+    ae_excluded = []
+    head_excluded = []
     warmup_flags = []
     under_attack_flags = []
 
@@ -490,6 +499,8 @@ def dc_fltrust_aggregate(
         should_exclude = is_ch1_adversarial or is_ch2_adversarial
 
         exclusion_flags.append(should_exclude)
+        ae_excluded.append(should_exclude if joint_exclusion else is_ch1_adversarial)
+        head_excluded.append(should_exclude if joint_exclusion else is_ch2_adversarial)
         warmup_flags.append(is_warmup)
         under_attack_flags.append(is_under_attack)
 
@@ -519,7 +530,7 @@ def dc_fltrust_aggregate(
     # Aggregate AE weights — exclude Byzantine clients from ch1
     ch1_weights = torch.tensor([
         s if not excl else 0.0
-        for s, excl in zip(ch1_scores, exclusion_flags)
+        for s, excl in zip(ch1_scores, ae_excluded)
     ])
     ch1_norm = ch1_weights.sum()
     if ch1_norm > 0:
@@ -555,7 +566,7 @@ def dc_fltrust_aggregate(
     ch2_weights = torch.tensor([
         (s if s is not None and isinstance(s, float) else 0.0)
         if not (excl or wrm) else 0.0
-        for s, excl, wrm in zip(ch2_scores, exclusion_flags, warmup_flags)
+        for s, excl, wrm in zip(ch2_scores, head_excluded, warmup_flags)
     ])
     ch2_norm = ch2_weights.sum()
     if ch2_norm > 0:
@@ -569,7 +580,7 @@ def dc_fltrust_aggregate(
               for k in scaled_ae[0]}
 
     active_head_updates = [
-        (w, d) for w, d, excl, wrm in zip(ch2_weights, scaled_head, exclusion_flags, warmup_flags)
+        (w, d) for w, d, excl, wrm in zip(ch2_weights, scaled_head, head_excluded, warmup_flags)
         if not (excl or wrm) and d is not None
     ]
     
@@ -931,9 +942,8 @@ class KrumFedAURA(FedAvg):
             )
             if idx in flagged_indices:
                 logger.warning(
-                    f"{round_tag} [FLTrust] Client {idx} flagged — "
-                    f"trust score {trust:.4f} ≤ threshold {cfg.FLTRUST_MIN_TRUST_SCORE}. "
-                    f"Client's gradient direction opposes benign improvement."
+                    f"{round_tag} [FLTrust] Client {idx} flagged on at least one channel — "
+                    f"ch1 trust score {trust:.4f}, classified {classifications[idx]}."
                 )
 
         # Persist trust scores for Upgrade 3 detection log
