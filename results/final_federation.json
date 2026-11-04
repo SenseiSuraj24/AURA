@@ -1,0 +1,234 @@
+{
+ "train_fraction": 1.0,
+ "rounds": 20,
+ "seeds": 3,
+ "mse_split": 0.03357340767979622,
+ "g0": {
+  "ae_auroc": 0.9900953066257419,
+  "ae_recall_1pct": 0.6250625312656328,
+  "ae_fpr_1pct": 0.009784503248296625,
+  "ae_recall_2pct": 0.7398699349674838,
+  "head_auroc": 0.5057830372958623,
+  "head_recall_1pct": 0.0,
+  "union_recall": 0.6250625312656328,
+  "union_fpr": 0.01956900649659325,
+  "ae_recall_same_fpr": 0.7348674337168585,
+  "ae_recall_by_class": {
+   "Analysis": 0.0,
+   "Backdoor": 0.7580645161290323,
+   "DoS": 0.592156862745098,
+   "Exploits": 0.4271330153683095,
+   "Fuzzers": 0.9010123734533183,
+   "Generic": 0.7473118279569892,
+   "Reconnaissance": 0.8714953271028038,
+   "Shellcode": 1.0,
+   "Worms": 1.0
+  }
+ },
+ "runs": {
+  "trust|none|0.0": {
+   "ae_auroc": 0.9885637819041566,
+   "ae_recall_1pct": 0.5964648991162248,
+   "ae_fpr_1pct": 0.009995774573496012,
+   "ae_recall_2pct": 0.7143571785892946,
+   "head_auroc": 0.33742835508231056,
+   "head_recall_1pct": 0.0,
+   "union_recall": 0.5964648991162248,
+   "union_fpr": 0.019753868906142714,
+   "ae_recall_same_fpr": 0.7128564282141069,
+   "ae_recall_by_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.7365591397849464,
+    "DoS": 0.5816993464052288,
+    "Exploits": 0.40257904963787317,
+    "Fuzzers": 0.8571428571428572,
+    "Generic": 0.7374551971326165,
+    "Reconnaissance": 0.8644859813084113,
+    "Shellcode": 0.5299145299145298,
+    "Worms": 1.0
+   },
+   "ae_excluded": {
+    "hospital": 0.0,
+    "bank": 0.0,
+    "university": 0.0,
+    "isp": 0.016666666666666666,
+    "retail": 0.31666666666666665
+   },
+   "head_excluded": {
+    "hospital": 0.0,
+    "bank": 0.3636363636363636,
+    "university": 0.0,
+    "isp": 0.0,
+    "retail": 0.0
+   },
+   "ae_recall_1pct_std": 0.0014489033847743158,
+   "union_recall_std": 0.0014489033847743158
+  },
+  "trust|sign_flip|0.0": {
+   "ae_auroc": 0.9878291064139791,
+   "ae_recall_1pct": 0.5881273970318492,
+   "ae_fpr_1pct": 0.009896741139808799,
+   "ae_recall_2pct": 0.69826579956645,
+   "head_auroc": 0.3357085586711383,
+   "head_recall_1pct": 0.0,
+   "union_recall": 0.5881273970318492,
+   "union_fpr": 0.019707653303755346,
+   "ae_recall_same_fpr": 0.6946806736701685,
+   "ae_recall_by_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.6774193548387096,
+    "DoS": 0.5725490196078431,
+    "Exploits": 0.39304009892245184,
+    "Fuzzers": 0.8560179977502812,
+    "Generic": 0.728494623655914,
+    "Reconnaissance": 0.8644859813084113,
+    "Shellcode": 0.40170940170940167,
+    "Worms": 1.0
+   },
+   "ae_excluded": {
+    "hospital": 1.0,
+    "bank": 0.0,
+    "university": 0.0,
+    "isp": 0.0,
+    "retail": 0.43333333333333335
+   },
+   "head_excluded": {
+    "hospital": 0.0,
+    "bank": 0.3636363636363636,
+    "university": 0.0,
+    "isp": 0.0,
+    "retail": 0.0
+   },
+   "ae_recall_1pct_std": 0.003126285352551723,
+   "union_recall_std": 0.003126285352551723
+  },
+  "trust|head_flip|0.0": {
+   "ae_auroc": 0.9885637819041566,
+   "ae_recall_1pct": 0.5964648991162248,
+   "ae_fpr_1pct": 0.009995774573496012,
+   "ae_recall_2pct": 0.7143571785892946,
+   "head_auroc": 0.33607768899238605,
+   "head_recall_1pct": 0.0,
+   "union_recall": 0.5964648991162248,
+   "union_fpr": 0.019734062219405272,
+   "ae_recall_same_fpr": 0.7127730531932633,
+   "ae_recall_by_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.7365591397849464,
+    "DoS": 0.5816993464052288,
+    "Exploits": 0.40257904963787317,
+    "Fuzzers": 0.8571428571428572,
+    "Generic": 0.7374551971326165,
+    "Reconnaissance": 0.8644859813084113,
+    "Shellcode": 0.5299145299145298,
+    "Worms": 1.0
+   },
+   "ae_excluded": {
+    "hospital": 0.0,
+    "bank": 0.0,
+    "university": 0.0,
+    "isp": 0.016666666666666666,
+    "retail": 0.31666666666666665
+   },
+   "head_excluded": {
+    "hospital": 1.0,
+    "bank": 0.3333333333333333,
+    "university": 0.0,
+    "isp": 0.0,
+    "retail": 0.0
+   },
+   "ae_recall_1pct_std": 0.0014489033847743158,
+   "union_recall_std": 0.0014489033847743158
+  },
+  "trust|none|0.5": {
+   "ae_auroc": 0.9876965160536747,
+   "ae_recall_1pct": 0.585125896281474,
+   "ae_fpr_1pct": 0.010160830296308035,
+   "ae_recall_2pct": 0.6986826746706686,
+   "head_auroc": 0.33905033347762464,
+   "head_recall_1pct": 0.0,
+   "union_recall": 0.585125896281474,
+   "union_fpr": 0.01995193577351714,
+   "ae_recall_same_fpr": 0.6980990495247624,
+   "ae_recall_by_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.6559139784946236,
+    "DoS": 0.5699346405228758,
+    "Exploits": 0.38897721250662426,
+    "Fuzzers": 0.8560179977502812,
+    "Generic": 0.7293906810035843,
+    "Reconnaissance": 0.8644859813084113,
+    "Shellcode": 0.3333333333333333,
+    "Worms": 1.0
+   },
+   "ae_excluded": {
+    "hospital": 0.0,
+    "bank": 0.8666666666666667,
+    "university": 0.0,
+    "isp": 0.0,
+    "retail": 0.65
+   },
+   "head_excluded": {
+    "hospital": 0.0,
+    "bank": 0.0,
+    "university": 0.0,
+    "isp": 0.0,
+    "retail": 0.0
+   },
+   "ae_recall_1pct_std": 0.0015463762707179703,
+   "union_recall_std": 0.0015463762707179703
+  },
+  "fedavg|none|0.0": {
+   "ae_auroc": 0.9873698650809586,
+   "ae_recall_1pct": 0.5842087710521927,
+   "ae_fpr_1pct": 0.009956161200021128,
+   "ae_recall_2pct": 0.6560780390195098,
+   "head_auroc": 0.33006441836695033,
+   "head_recall_1pct": 0.0,
+   "union_recall": 0.5842087710521927,
+   "union_fpr": 0.019687846617017907,
+   "ae_recall_same_fpr": 0.6529931632482908,
+   "ae_recall_by_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.6182795698924731,
+    "DoS": 0.5686274509803921,
+    "Exploits": 0.38950715421303655,
+    "Fuzzers": 0.8560179977502812,
+    "Generic": 0.7293906810035843,
+    "Reconnaissance": 0.8637071651090343,
+    "Shellcode": 0.2905982905982906,
+    "Worms": 1.0
+   },
+   "ae_recall_1pct_std": 0.0015863179581824757,
+   "union_recall_std": 0.0015863179581824757
+  },
+  "fedavg|sign_flip|0.0": {
+   "ae_auroc": 0.985881620628621,
+   "ae_recall_1pct": 0.5830415207603802,
+   "ae_fpr_1pct": 0.010174034754132996,
+   "ae_recall_2pct": 0.630148407537102,
+   "head_auroc": 0.3315341788902691,
+   "head_recall_1pct": 0.0,
+   "union_recall": 0.5830415207603802,
+   "union_fpr": 0.019786880050705117,
+   "ae_recall_same_fpr": 0.6289811572452892,
+   "ae_recall_by_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.6129032258064516,
+    "DoS": 0.5633986928104575,
+    "Exploits": 0.3888005652711535,
+    "Fuzzers": 0.8560179977502812,
+    "Generic": 0.7275985663082437,
+    "Reconnaissance": 0.8621495327102804,
+    "Shellcode": 0.28205128205128205,
+    "Worms": 1.0
+   },
+   "ae_recall_1pct_std": 0.00040845251672219515,
+   "union_recall_std": 0.00040845251672219515
+  }
+ },
+ "thresholds": {
+  "FLTRUST_CH1_THRESHOLD": 0.01730209130328149,
+  "CH2_ANTI_ALIGN_THRESHOLD": 0.49202625155448915
+ }
+}

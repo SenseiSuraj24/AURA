@@ -68,7 +68,7 @@ SPLIT_BLOCK_WINDOWS   = 200    # ~12k flows per block; keeps EMA-relevant runs c
 
 # Portion of the TRAINING POOL used for training (seeded, stratified window
 # sample). 1.0 = the full pool. Test/calibration/root are unaffected.
-TRAIN_DATA_FRACTION = 0.3      # 0.3 for development, 1.0 for final paper runs
+TRAIN_DATA_FRACTION = 1.0      # 0.3 for development, 1.0 for final paper runs
 DATA_LOAD_FRACTION  = TRAIN_DATA_FRACTION   # deprecated alias for older scripts
 
 # Parsed, time-sorted flow table and transformed feature matrices (memory-mapped)
@@ -277,11 +277,13 @@ FLTRUST_MIN_TRUST_SCORE = 0.0   # 0.0 = ReLU only (strict); raise to e.g. 0.05 t
 # ch1 disambiguation threshold for dc_fltrust_aggregate.
 # Clients with ch1 above this are treated as honest (HEALTHY or UNDER_ATTACK);
 # clients below it are treated as Byzantine.
-# PROVISIONAL: these three were calibrated before the shared round recipe
-# (aura/fl_round.py) and the 76-feature layout. Recalibrate from the honest-client
-# distribution before reporting detection results.
-FLTRUST_CH1_THRESHOLD = 0.0023
-CH2_ANTI_ALIGN_THRESHOLD = 0.12   # ch2 cosine below this: head update is adversarial
+# The first two are the 5th percentile of honest client scores over 20 rounds at
+# 100% training data and the P99 routing cut, channel 2 counted after warmup
+# (scripts/final_federation.py). Recalibrate if G0, the routing cut, the round
+# recipe or the client data change.
+FLTRUST_CH1_THRESHOLD = 0.0173
+CH2_ANTI_ALIGN_THRESHOLD = 0.492  # ch2 cosine below this: head update is adversarial
+# Not calibrated, and nothing acts on the label it sets.
 CH2_UNDER_ATTACK_THRESHOLD = 0.5  # ch2 cosine above this: client is under real attack
 
 # ─────────────────────────────────────────────────────────────────────────────
