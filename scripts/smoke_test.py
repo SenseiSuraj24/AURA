@@ -179,6 +179,11 @@ def split_is_leakage_free():
     covered = np.concatenate([full.windows[k] for k in ("test", "calib", "root", "train_pool")])
     assert len(covered) == table.n_windows == len(np.unique(covered)), \
         "split sets do not cover every window exactly once"
+    # A fresh split and the same split reloaded from disk must hash alike, or the manifest goes stale
+    ds._SPLITS.clear()
+    fresh = ds.compute_split(0.5, table).meta["hash"]
+    ds._SPLITS.clear()
+    assert ds.compute_split(0.5, table).meta["hash"] == fresh, "split hash changes after reloading"
     ds.compute_split(table=table)       # restore the configured split file
 
 

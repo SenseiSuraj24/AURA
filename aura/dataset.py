@@ -431,7 +431,8 @@ def compute_split(train_fraction: Optional[float] = None,
     if saved_meta == meta:
         windows = {k: saved[k] for k in ("test", "calib", "root", "train_pool", "train")}
     else:
-        windows = _assign_windows(table, train_fraction)
+        # The file stores int32, and the hash below must match what a later load computes
+        windows = {k: v.astype(np.int32) for k, v in _assign_windows(table, train_fraction).items()}
         _save_split_windows(windows, meta)
 
     split = Split(windows=windows, flows=_dedup_flows(table, windows), meta=meta)
