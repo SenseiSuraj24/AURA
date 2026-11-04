@@ -13,8 +13,8 @@ percentiles are out-of-sample.
 Writes logs/calibration_results.json, which config.py reads at import time:
   recommended_MSE_THRESHOLD_MEDIUM  → P90 of benign calibration MSE
   recommended_MSE_THRESHOLD_HIGH    → P99
-  CH2_MSE_SPLIT_THRESHOLD           → P75 (DC-FLTrust two-pass routing;
-                                      to be re-derived in Wave 2)
+  CH2_MSE_SPLIT_THRESHOLD           → P99 (DC-FLTrust two-pass routing;
+                                      scripts/ae_routing_cut.py compares cuts)
 
 Also audits that the preprocessor's output columns match config.FEATURE_NAMES
 and the manifest written by train.py.
@@ -74,7 +74,7 @@ def print_mse_report(mse: np.ndarray, pct: dict) -> None:
     print(f"  Std MSE              : {mse.std():.6f}\n  Percentiles:")
     for p, v in pct.items():
         print(f"    P{str(p).ljust(5)} : {v:.6f}")
-    print("\n  MEDIUM = P90, HIGH = P99, HIGH_CONSERVATIVE = P99.5, CH2 split = P75")
+    print("\n  MEDIUM = P90, HIGH = P99, HIGH_CONSERVATIVE = P99.5, CH2 split = P99")
     print("=" * 70)
 
 
@@ -129,7 +129,7 @@ def main():
         "MSE_THRESHOLD_MEDIUM": pct[90],
         "MSE_THRESHOLD_HIGH":   pct[99],
         "MSE_THRESHOLD_HIGH_CONSERVATIVE": pct[99.5],
-        "CH2_MSE_SPLIT_THRESHOLD": pct[75],
+        "CH2_MSE_SPLIT_THRESHOLD": pct[99],
     }
     out_path = cfg.LOGS_DIR / "calibration_results.json"
     out_path.write_text(json.dumps(results, indent=2))

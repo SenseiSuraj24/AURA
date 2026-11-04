@@ -582,9 +582,9 @@ def load_ch2_split_threshold() -> tuple[float, bool]:
 # DC-FLTrust two-pass split threshold
 # Flows above this threshold are considered potentially anomalous 
 # and routed to AttackHead for channel 2 analysis.
-# This is intentionally lower than MSE_THRESHOLD_HIGH (response engine)
-# because we want AttackHead to see all suspicious flows, not just
-# the most extreme ones. Set to P75 of benign MSE distribution.
+# Set to P99 of benign MSE, the same point as MSE_THRESHOLD_HIGH. A lower cut
+# withholds hard benign flows from the AE every round, and its error on them grows
+# until attacks fall below the alarm threshold (scripts/ae_routing_cut.py).
 # Updated automatically by calibrate_thresholds.py alongside other thresholds.
 CH2_MSE_SPLIT_THRESHOLD, CH2_SPLIT_CALIBRATED = load_ch2_split_threshold()
 
