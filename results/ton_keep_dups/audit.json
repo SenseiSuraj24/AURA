@@ -1,0 +1,105 @@
+{
+ "flows_in_archive": 27520260,
+ "flows_sampled": 2751121,
+ "hosts_in_sample": 4617,
+ "attack_rate": 0.3899,
+ "duplicate_rate": 0.8208,
+ "train_attack_share": 0.3903,
+ "ae_unseen_vectors": {
+  "benign": 4467,
+  "attacks": 19552,
+  "auroc": 0.37639665901462516,
+  "recall_1pct": 0.01406505728314239,
+  "fpr_1pct": 0.009402283411685695
+ },
+ "class_counts": {
+  "Benign": 1678464,
+  "Backdoor": 20126,
+  "ddos": 412967,
+  "dos": 20505,
+  "injection": 38128,
+  "mitm": 569,
+  "password": 159901,
+  "ransomware": 400,
+  "scanning": 135651,
+  "xss": 284410
+ },
+ "attacks_by_org": {
+  "hospital": 472704,
+  "bank": 33134,
+  "university": 113081,
+  "isp": 179364,
+  "retail": 274374
+ },
+ "single_feature_top": [
+  {
+   "feature": "NUM_PKTS_UP_TO_128_BYTES",
+   "auroc": 0.8548
+  },
+  {
+   "feature": "OUT_BYTES",
+   "auroc": 0.852
+  },
+  {
+   "feature": "MIN_TTL",
+   "auroc": 0.8144
+  },
+  {
+   "feature": "MAX_TTL",
+   "auroc": 0.8144
+  },
+  {
+   "feature": "IN_PKTS",
+   "auroc": 0.8092
+  },
+  {
+   "feature": "OUT_PKTS",
+   "auroc": 0.7998
+  },
+  {
+   "feature": "TCP_WIN_MAX_IN",
+   "auroc": 0.7972
+  },
+  {
+   "feature": "TCP_WIN_MAX_OUT",
+   "auroc": 0.7909
+  },
+  {
+   "feature": "IN_BYTES",
+   "auroc": 0.7864
+  },
+  {
+   "feature": "MIN_IP_PKT_LEN",
+   "auroc": 0.767
+  },
+  {
+   "feature": "SERVER_TCP_FLAGS",
+   "auroc": 0.7621
+  },
+  {
+   "feature": "DST_TO_SRC_AVG_THROUGHPUT",
+   "auroc": 0.7447
+  },
+  {
+   "feature": "DST_TO_SRC_SECOND_BYTES",
+   "auroc": 0.7282
+  },
+  {
+   "feature": "LONGEST_FLOW_PKT",
+   "auroc": 0.7254
+  },
+  {
+   "feature": "MAX_IP_PKT_LEN",
+   "auroc": 0.7254
+  }
+ ],
+ "isolation_forest": {
+  "auroc": 0.8323594303737987,
+  "recall_1pct": 0.03746839322657267
+ },
+ "ae": {
+  "auroc": 0.8766994988001706,
+  "recall_1pct": 0.04290858938012413,
+  "recall_2pct": 0.05810538145225142
+ }
+}

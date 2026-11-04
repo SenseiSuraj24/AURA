@@ -1,0 +1,106 @@
+{
+ "unsw_to_ton": {
+  "lightgbm": {
+   "auroc": 0.2885,
+   "recall_1pct": 0.0249,
+   "fpr": 0.0097,
+   "per_class": {
+    "Backdoor": 0.0,
+    "ddos": 0.0,
+    "dos": 0.04,
+    "injection": 0.013,
+    "mitm": 0.0,
+    "password": 0.147,
+    "ransomware": 0.4,
+    "scanning": 0.014,
+    "xss": 0.004
+   }
+  },
+  "ae": {
+   "auroc": 0.2744,
+   "recall_1pct": 0.0094,
+   "fpr": 0.0054,
+   "recall_std": 0.0122,
+   "per_class_seed0": {
+    "Backdoor": 0.0,
+    "ddos": 0.0,
+    "dos": 0.0,
+    "injection": 0.001,
+    "mitm": 0.0,
+    "password": 0.0,
+    "ransomware": 0.0,
+    "scanning": 0.007,
+    "xss": 0.0
+   }
+  },
+  "head_labelled": {
+   "auroc": 0.358,
+   "recall_1pct": 0.0118,
+   "fpr": 0.0079,
+   "recall_std": 0.0082,
+   "per_class_seed0": {
+    "Backdoor": 0.002,
+    "ddos": 0.0,
+    "dos": 0.002,
+    "injection": 0.0,
+    "mitm": 0.0,
+    "password": 0.0,
+    "ransomware": 0.2,
+    "scanning": 0.001,
+    "xss": 0.0
+   }
+  }
+ },
+ "ton_to_unsw": {
+  "lightgbm": {
+   "auroc": 0.73,
+   "recall_1pct": 0.0023,
+   "fpr": 0.009,
+   "per_class": {
+    "Analysis": 0.0,
+    "Backdoor": 0.0,
+    "DoS": 0.0,
+    "Exploits": 0.002,
+    "Fuzzers": 0.007,
+    "Generic": 0.0,
+    "Reconnaissance": 0.0,
+    "Shellcode": 0.0,
+    "Worms": 0.0
+   }
+  },
+  "ae": {
+   "auroc": 0.4845,
+   "recall_1pct": 0.0066,
+   "fpr": 0.0098,
+   "recall_std": 0.0016,
+   "per_class_seed0": {
+    "Analysis": 0.0,
+    "Backdoor": 0.0,
+    "DoS": 0.024,
+    "Exploits": 0.009,
+    "Fuzzers": 0.006,
+    "Generic": 0.008,
+    "Reconnaissance": 0.002,
+    "Shellcode": 0.0,
+    "Worms": 0.125
+   }
+  },
+  "head_labelled": {
+   "auroc": 0.6126,
+   "recall_1pct": 0.3321,
+   "fpr": 0.0099,
+   "recall_std": 0.2344,
+   "per_class_seed0": {
+    "Analysis": 0.0,
+    "Backdoor": 0.714,
+    "DoS": 0.504,
+    "Exploits": 0.302,
+    "Fuzzers": 0.786,
+    "Generic": 0.264,
+    "Reconnaissance": 0.846,
+    "Shellcode": 0.811,
+    "Worms": 0.75
+   }
+  }
+ }
+}

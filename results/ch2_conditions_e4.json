@@ -1,0 +1,71 @@
+{
+ "seen_classes": {
+  "hospital": [
+   "Analysis",
+   "Fuzzers",
+   "Worms"
+  ],
+  "university": [
+   "Backdoor",
+   "Generic"
+  ],
+  "isp": [
+   "DoS",
+   "Reconnaissance"
+  ],
+  "retail": [
+   "Exploits",
+   "Shellcode"
+  ]
+ },
+ "by_alpha": {
+  "1.0": {
+   "pseudo": {
+    "local": 0.0461,
+    "fedavg": 0.0015,
+    "cosine_filter": 0.0002,
+    "honest_excluded_by_filter": 0.79
+   },
+   "labelled_100": {
+    "local": 0.02,
+    "fedavg": 0.2438,
+    "cosine_filter": 0.2268,
+    "honest_excluded_by_filter": 0.0833
+   },
+   "ae_recall_unseen_1pct": 0.7612,
+   "ae_recall_unseen_2pct": 0.9527
+  },
+  "0.25": {
+   "pseudo": {
+    "local": 0.0116,
+    "fedavg": 0.0006,
+    "cosine_filter": 0.0011,
+    "honest_excluded_by_filter": 0.34
+   },
+   "labelled_100": {
+    "local": 0.034,
+    "fedavg": 0.1021,
+    "cosine_filter": 0.0749,
+    "honest_excluded_by_filter": 0.1167
+   },
+   "ae_recall_unseen_1pct": 0.1602,
+   "ae_recall_unseen_2pct": 0.2044
+  },
+  "0.1": {
+   "pseudo": {
+    "local": 0.007,
+    "fedavg": 0.0003,
+    "cosine_filter": 0.0065,
+    "honest_excluded_by_filter": 0.84
+   },
+   "labelled_100": {
+    "local": 0.0106,
+    "fedavg": 0.0267,
+    "cosine_filter": 0.0255,
+    "honest_excluded_by_filter": 0.29
+   },
+   "ae_recall_unseen_1pct": 0.0735,
+   "ae_recall_unseen_2pct": 0.0872
+  }
+ }
+}
