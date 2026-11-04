@@ -120,4 +120,5 @@ def aggregate(
         client_round_counts=[current_round] * len(ae_deltas),
         ch2_warmup_rounds=cfg.CH2_WARMUP_ROUNDS,
         current_round=current_round,
+        ch1_threshold=cfg.FLTRUST_CH1_THRESHOLD,
     )
