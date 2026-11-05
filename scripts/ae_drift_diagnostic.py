@@ -89,7 +89,8 @@ def local_ae_delta(ae, g_ae, x, y, routed, lr):
     ae.train()
     opt = torch.optim.Adam(ae.parameters(), lr=lr)
     export, _, steps = train_ae_pass(ae, opt, train_x, cfg.AE_BATCH_SIZE, cycle_to_horizon=True)
-    assert steps == cfg.FL_EXPORT_HORIZON, f"client stopped after {steps} steps"
+    # No steps means every flow was routed away, and the client sends a zero update as the real one does
+    assert steps in (0, cfg.FL_EXPORT_HORIZON), f"client stopped after {steps} steps"
     stats = {"trained": int(keep.sum()), "attacks_trained": int((y[keep] == 1).sum()), "attacks": int((y == 1).sum()), "flows": len(x)}
     return {k: export[k] - g_ae[k] for k in g_ae}, stats
 
