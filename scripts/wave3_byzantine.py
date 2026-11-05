@@ -129,7 +129,7 @@ def aggregate(defence, deltas, g, root):
     return agg, flags
 
 
-def federate(data, pool_x, defence, kind, n_att, seed, rounds):
+def federate(data, pool_x, defence, kind, n_att, seed, rounds, return_state=False):
     torch.manual_seed(cfg.SEED + seed)
     rng = np.random.default_rng(cfg.SEED + seed)
     g = fl_round.snapshot(copy.deepcopy(data.g0).autoencoder)
@@ -159,7 +159,7 @@ def federate(data, pool_x, defence, kind, n_att, seed, rounds):
         honest = [i for i in range(len(flows)) if i not in attackers]
         res["attackers_excluded"] = float(e[attackers].mean()) if attackers else None
         res["honest_excluded"] = float(e[honest].mean())
-    return res
+    return (res, g) if return_state else res
 
 
 def main():
