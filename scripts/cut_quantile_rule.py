@@ -63,7 +63,7 @@ def own_quantile_cut(ae, g, x, q):
     return float(torch.quantile(mse, q / 100.0)) if len(mse) <= 2 ** 24 else float(np.percentile(mse.numpy(), q))
 
 
-def federate(data, pool_x, mode, q, burden, seed, rounds, frozen_cuts, bands):
+def federate(data, pool_x, mode, q, burden, seed, rounds, frozen_cuts, bands, lr=None):
     torch.manual_seed(cfg.SEED + seed)
     g = fl_round.snapshot(copy.deepcopy(data.g0).autoencoder)
     flows = client_flows(data, pool_x, burden, seed, 10 ** 9)
@@ -85,7 +85,7 @@ def federate(data, pool_x, mode, q, burden, seed, rounds, frozen_cuts, bands):
         deltas = []
         for x, y in flows:
             cfg.CH2_MSE_SPLIT_THRESHOLD = frozen_cuts[q] if mode == "frozen" else own_quantile_cut(ae, g, x, q)
-            deltas.append(local_ae_delta(ae, g, x, y, True, cfg.AE_LEARNING_RATE)[0])
+            deltas.append(local_ae_delta(ae, g, x, y, True, lr or cfg.AE_LEARNING_RATE)[0])
         g = fl_round.apply_delta(g, c._mean_delta(deltas, g))
         ae.load_state_dict(g)
         ae.eval()
@@ -100,6 +100,7 @@ def main():
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--long", action="store_true", help="P97, P98 and P99 over 80 rounds")
+    ap.add_argument("--lr-check", action="store_true", help="P75 and P98 at 0.5x and 2x the learning rate")
     args = ap.parse_args()
     clean, attacked = (2, 2) if args.quick else (40, 20)
     if args.quick:
@@ -116,7 +117,18 @@ def main():
     log.info(f"frozen cuts {frozen_cuts}")
 
     out = ROOT / "results" / "cut_quantile_rule.json"
-    if args.long:
+    lrs = {}
+    if args.lr_check:
+        # Is the P75 collapse and the P98 stability an artefact of one learning rate? Prediction,
+        # fixed before running: at both 0.5x and 2x, P75 ends at round 40 below 0.40 and P98 at or
+        # above 0.55 (the 1x results are 0.103 and 0.590).
+        plan = []
+        for mult in (0.5, 2.0):
+            for q in (75, 98):
+                plan.append((f"lr{mult}", "frozen", q, 0.0, 2 if args.quick else 40, False))
+                lrs[(f"lr{mult}", q)] = cfg.AE_LEARNING_RATE * mult
+        out = ROOT / "results" / "cut_quantile_rule_lr.json"
+    elif args.long:
         # P97 lost one seed between rounds 30 and 40: does every cut below P99 collapse, only later?
         plan = [("long", "frozen", q, 0.0, 2 if args.quick else 80, True) for q in (97, 98, 99)]
         out = ROOT / "results" / "cut_quantile_rule_long.json"
@@ -129,7 +141,8 @@ def main():
     t0 = time.time()
     try:
         for part, mode, q, burden, rounds, bands in plan:
-            runs = [federate(data, pool_x, mode, q, burden, s, rounds, frozen_cuts, bands) for s in range(args.seeds)]
+            runs = [federate(data, pool_x, mode, q, burden, s, rounds, frozen_cuts, bands, lrs.get((part, q)))
+                    for s in range(args.seeds)]
             recall = np.array([[p["recall_1pct"] for p in cv] for cv, _ in runs])
             row = {"recall_by_round": recall.mean(0).tolist(), "final_recall": float(recall[:, -1].mean()), "final_recall_std": float(recall[:, -1].std()),
                    "auroc_by_round": np.array([[p["auroc"] for p in cv] for cv, _ in runs]).mean(0).tolist(),
