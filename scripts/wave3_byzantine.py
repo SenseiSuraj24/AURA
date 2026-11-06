@@ -23,6 +23,16 @@ stopped at the export step.
 --sweep repeats the adaptive attack with two attackers at lower cosines (more poison, less
 cover), since at 0.6 it barely moved FedAvg and so tested nothing.
 
+--rootaware gives two attackers the server's root update (worst case: they hold the root data)
+and sets their cosine WITH THE ROOT to 0.6 down to 0.02, the rest poison. FLTrust weights by that
+cosine, so this is the attack it is weakest against. Prediction, fixed before running: FLTrust
+loses more than 0.03 recall at some cosine in the sweep; a cosine just above zero buys weight
+while carrying almost pure poison.
+
+--krum-control runs Krum correctly configured for one attacker (f=1, so k = n - f - 2 = 2
+neighbours) against one attacker, next to the old k = 1 rule. Prediction: f=1 Krum protects
+against every one-attacker attack that hurts FedAvg.
+
 Criterion, fixed before running: a defence protects against an attack if its recall at 1% FPR
 stays within 0.03 of its own clean recall, for an attack that lowers FedAvg's by more than 0.05.
 
@@ -71,6 +81,9 @@ ATTACKS = [("none", 0), ("sign_flip", 1), ("sign_flip", 2), ("scaled_flip", 1),
 DEFENCES = ["trust", "fedavg", "median", "krum", "fltrust"]
 ADAPTIVE_COSINE = 0.6
 SWEEP_COSINES = [0.4, 0.2, 0.1, 0.05, 0.0]
+# Cosine with the root update. Honest clients sit around 0.02-0.4 in the logs, so even 0.05 keeps
+# a positive FLTrust weight while leaving most of the update free for poison.
+ROOTAWARE_COSINES = [0.6, 0.3, 0.1, 0.05, 0.02]
 POISON_FLOWS = 20000
 
 
@@ -96,7 +109,7 @@ def poison_delta(ae, g, pool_x, rng):
     return {k: export[k] - g[k] for k in g}
 
 
-def attack(kind, honest, ae, g, pool_x, rng):
+def attack(kind, honest, ae, g, pool_x, rng, root=None):
     if kind == "sign_flip":
         return {k: -v for k, v in honest.items()}
     if kind == "scaled_flip":
@@ -105,7 +118,9 @@ def attack(kind, honest, ae, g, pool_x, rng):
     if kind == "poison":
         return p
     h, pv = flat(honest), flat(p)
-    u = h / h.norm()
+    # rootaware knows the server's root update, so it sets its cosine with the very
+    # vector FLTrust scores against; adaptive only has its own honest update to aim at.
+    u = flat(root) / flat(root).norm() if kind.startswith("rootaware") else h / h.norm()
     orth = pv - (pv @ u) * u
     cos = float(kind.split("@")[1]) if "@" in kind else ADAPTIVE_COSINE
     mixed = cos * u + np.sqrt(1 - cos ** 2) * orth / orth.norm()
@@ -120,8 +135,9 @@ def aggregate(defence, deltas, g, root):
     if defence == "fltrust":
         agg, scores = ae_only_fltrust_aggregate(deltas, root)
         return agg, [s == 0 for s in scores]
-    if defence == "krum":
-        keep = krum_select([[v.numpy() for v in d.values()] for d in deltas], num_to_select=3)
+    if defence in ("krum", "krum_f1"):
+        keep = krum_select([[v.numpy() for v in d.values()] for d in deltas], num_to_select=3,
+                           f=1 if defence == "krum_f1" else None)
         return c._mean_delta([deltas[i] for i in keep], g), [i not in keep for i in range(len(deltas))]
     agg, _, ch1, _, _, flags = dc_fltrust_aggregate(
         deltas, [NO_HEAD] * len(deltas), root, NO_HEAD, client_round_counts=[0] * len(deltas),
@@ -139,11 +155,15 @@ def federate(data, pool_x, defence, kind, n_att, seed, rounds, return_state=Fals
     ae = FlowAutoencoder()
     excluded = []
     for _ in range(rounds):
+        # Only the root-aware attack computes the root first; every other attack keeps the
+        # order the committed results (test_split.json included) were produced in.
+        root = root_ae_delta(g, root_benign) if kind.startswith("rootaware") else None
         deltas = []
         for i, (x, y) in enumerate(flows):
             d, _ = local_ae_delta(ae, g, x, y, True, cfg.AE_LEARNING_RATE)
-            deltas.append(attack(kind, d, ae, g, pool_x, rng) if i in attackers else d)
-        root = root_ae_delta(g, root_benign) if defence in ("trust", "fltrust") else None
+            deltas.append(attack(kind, d, ae, g, pool_x, rng, root) if i in attackers else d)
+        if root is None and defence in ("trust", "fltrust"):
+            root = root_ae_delta(g, root_benign)
         agg, flags = aggregate(defence, deltas, g, root)
         if flags is not None:
             excluded.append(flags)
@@ -168,14 +188,27 @@ def main():
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--defences", help="comma-separated subset, e.g. fltrust")
+    ap.add_argument("--rootaware", action="store_true", help="attackers who know the server's root update")
+    ap.add_argument("--krum-control", action="store_true", help="Krum with f=1 against one attacker")
     args = ap.parse_args()
     rounds, attacks, defences = ROUNDS, ATTACKS, DEFENCES
     if args.quick:
         rounds, args.seeds, attacks = 2, 1, [("none", 0), ("scaled_flip", 1), ("adaptive", 2)]
+        if args.rootaware:
+            attacks = [("rootaware@0.1", 2)]
     out_path = ROOT / "results" / "wave3_byzantine.json"
     if args.sweep:
         attacks, defences = [(f"adaptive@{x}", 2) for x in SWEEP_COSINES], ["trust", "fedavg", "median"]
         out_path = ROOT / "results" / "wave3_adaptive_sweep.json"
+    if args.rootaware:
+        if not args.quick:
+            attacks = [(f"rootaware@{x}", 2) for x in ROOTAWARE_COSINES]
+        defences = ["fltrust", "trust", "fedavg", "median"]
+        out_path = ROOT / "results" / "wave3_rootaware.json"
+    if args.krum_control:
+        attacks = [("none", 0), ("sign_flip", 1), ("scaled_flip", 1), ("poison", 1), ("adaptive@0.0", 1)]
+        defences = ["krum_f1", "krum"]
+        out_path = ROOT / "results" / "wave3_krum_control.json"
     if args.defences:
         defences = args.defences.split(",")
     c.CLIENT_FLOWS = 10 ** 9
