@@ -155,11 +155,11 @@ def main():
     gaps = [v["summary"]["gap"] for v in res["classes"].values()]
     root_only = [abs(v["summary"]["clean"] - res["clean_full_root"]) for v in res["classes"].values()]
     res["verdict"] = {
-        "p3_root_change_alone_small": bool(gaps) and all(r < abs(g) / 2 for r, g in zip(root_only, gaps)),
+        "p3_root_change_alone_small": bool(bool(gaps) and all(r < abs(g) / 2 for r, g in zip(root_only, gaps))),
         "auroc_unseen_vs_known": auroc,
         "p1_auroc_ok": auroc is not None and auroc >= 0.8,
         "share_classes_negative_gap": float(np.mean([g < 0 for g in gaps])) if gaps else None,
-        "p2_ok": bool(gaps) and np.mean([g < 0 for g in gaps]) >= 2 / 3,
+        "p2_ok": bool(bool(gaps) and np.mean([g < 0 for g in gaps]) >= 2 / 3),
     }
     log.info(f"verdict {res['verdict']}")
     if not args.quick:
