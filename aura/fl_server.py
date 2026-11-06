@@ -93,6 +93,7 @@ logger = logging.getLogger(__name__)
 def krum_select(
     updates:       List[List[np.ndarray]],
     num_to_select: int = cfg.KRUM_NUM_TO_SELECT,
+    f:             Optional[int] = None,
 ) -> List[int]:
     """
     Krum Selection Algorithm (Blanchard et al., 2017).
@@ -104,15 +105,19 @@ def krum_select(
     2. Compute pairwise squared Euclidean distances: d(i,j) = ||w_i - w_j||²
     3. For each client i, compute the Krum score:
          s(i) = Σ_{j ∈ N_k(i)} d(i, j)
-       where N_k(i) = k nearest neighbours of i (k = n - num_to_select - 2)
+       where N_k(i) = k nearest neighbours of i, k = n - f - 2
     4. Select the num_to_select clients with the LOWEST Krum scores.
 
     Poisoned clients produce updates far from the cluster → high scores → dropped.
+    Krum's guarantee needs n > 2f + 2.
 
     Parameters
     ----------
     updates        : List of per-client parameters (each is a list of ndarrays)
     num_to_select  : How many clients to keep (KRUM_NUM_TO_SELECT in config)
+    f              : Number of attackers to tolerate. None keeps the earlier rule,
+                     k = n - num_to_select - 2, which confuses the number kept with f;
+                     every Krum result before this argument existed used it.
 
     Returns
     -------
@@ -128,8 +133,7 @@ def krum_select(
     for client_params in updates:
         flat.append(np.concatenate([p.flatten() for p in client_params]))
 
-    # k = n - num_to_select - 2  (guaranteed Byzantine tolerance formula)
-    k = max(1, n - num_to_select - 2)
+    k = max(1, n - (num_to_select if f is None else f) - 2)
 
     scores = []
     for i in range(n):
