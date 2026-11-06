@@ -1,27 +1,21 @@
 # AURA: Adaptive Unified Resilient Architecture
 
-This repository accompanies the AURA research project and contains the complete implementation, experimental pipeline, and evaluation framework used to produce the reported results.
+AURA is a research testbed for federated network intrusion detection: several organisations train a shared flow anomaly detector without sharing their traffic, while some members may be malicious.
 
-AURA is a federated, privacy-preserving, and Byzantine-robust AI system for critical infrastructure anomaly detection. 
+The repository contains the implementation, the attack simulations and the evaluation pipeline. It is under active re-evaluation (see [Results](#results-and-features)): no performance, robustness or privacy claim is made here until the corrected pipeline has been re-run.
 
-This repository contains the complete implementation, benchmarks, and attack simulations for the AURA research publication. It provides a dual-layer detection pipeline using a Flow Autoencoder (Statistical Tripwire) and a Spatio-Temporal Graph Neural Network (Contextual Validator), secured by a novel Dual-Channel FLTrust (DC-FLTrust) aggregation mechanism and Differential Privacy (DP-SGD).
+## Components
 
-## Key Contributions
-
-*   **Dual-Channel FLTrust**
-*   **H=32 trajectory bottleneck**
-*   **DP-SGD integration**
-*   **Local STGNN reasoning**
-*   **Automated privacy evaluation pipeline**
+*   **Flow autoencoder** (76 NetFlow features), trained centrally as a starting model and then federated across five organisations partitioned by destination IP.
+*   **Aggregation**: FLTrust-style trust scoring against a server-held root dataset, including a dual-channel variant (DC-FLTrust) that scores the autoencoder and an attack head separately, plus FedAvg, coordinate-wise median and Krum baselines.
+*   **Organisation-local graph model** (GraphSAGE), kept and trained locally, never federated.
+*   **Attack harness**: sign-flip, scaled, data-poisoning and adaptive members.
+*   **Privacy tooling**: Opacus DP-SGD integration and gradient-inversion (DLG) and membership-inference attacks. Privacy accounting is being corrected, so no privacy bound is claimed.
+*   **Audit log** of per-round aggregation decisions (Merkle chain).
 
 ## Overview
 
-Modern critical infrastructures require collaborative threat intelligence without exposing sensitive network traffic. Federated Learning (FL) enables this, but exposes the global model to Byzantine data poisoning and gradient leakage attacks. 
-
-AURA addresses this through three core design choices:
-1. **Dual-Channel FLTrust (DC-FLTrust)**: Upgrades the traditional FLTrust protocol by utilizing the Autoencoder's unoptimized `H=32` trajectory bottleneck to reliably segregate honest-but-anomalous nodes (under attack) from actively malicious Byzantine nodes attempting to poison the model.
-2. **Organization-local STGNN reasoning**: Replaces traditional deep learning detection with GraphSAGE-inductive graph networks to capture the spatio-temporal dynamics of lateral movement without federating the graph structure itself.
-3. **Empirical Privacy Evaluation**: Evaluates defenses against Deep Leakage from Gradients (DLG) and Membership Inference Attacks (MIA) natively through architectural bottlenecks, reinforced by Opacus DP-SGD ($\epsilon \le 1.0$).
+Federated learning lets organisations collaborate on detection without exposing raw traffic, but it exposes the shared model to poisoning by malicious members and the members to leakage through their updates. AURA is built to measure both under controlled conditions on NF-UNSW-NB15-v3 (NF-ToN-IoT-v3 support is experimental).
 
 ---
 
