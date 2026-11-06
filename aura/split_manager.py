@@ -1,171 +1,84 @@
 """
-aura/split_manager.py — Canonical Train/Test Split Authority
-=============================================================
+aura/split_manager.py — Canonical split accessor (backed by aura/dataset.py)
+=============================================================================
 
-All scripts that train or evaluate models MUST use this module to obtain
-train/test indices. Any script that computes its own split independently is a
-reproducibility bug.
+All scripts that train or evaluate models MUST obtain their windows here.
+The split itself lives in aura/dataset.compute_split():
 
-Design
-------
-- The split is computed ONCE on the full list of streaming graph windows.
-- Windows are first separated into attack-containing and benign-only buckets.
-- Each bucket is split chronologically (first 80% → train, last 20% → test).
-- Both buckets are re-sorted by original chronological index before returning,
-  preserving temporal order required by Mode D's EMA tracker.
-- The resulting train/test window indices are saved to splits/canonical_split.npz
-  and reloaded on every subsequent call — guaranteeing all scripts see the same
-  exact split regardless of invocation order.
+  * whole time-sorted dataset, cut into contiguous blocks of
+    cfg.SPLIT_BLOCK_WINDOWS windows,
+  * blocks assigned (seeded, stratified by attack era) to four disjoint sets:
+    test (20%), calibration (10%), server root (5%), training pool (65%),
+  * cfg.TRAIN_DATA_FRACTION subsamples the training pool only,
+  * flow-level sets are de-duplicated with priority test > calib > root > train.
 
 Usage
 -----
     from aura.split_manager import get_canonical_split
-    import config as cfg
-
-    calibration_windows, train_windows, test_windows = get_canonical_split(
-        all_windows, test_fraction=cfg.TEST_SPLIT_FRACTION
-    )
+    calibration, train, test, server_attack = get_canonical_split(all_windows)
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 import numpy as np
 
 import config as cfg
+from aura import dataset as ds
 
 logger = logging.getLogger(__name__)
 
-# File that persists the canonical index arrays between runs
-_SPLIT_FILE = cfg.SPLITS_DIR / "canonical_split.npz"
+
+def _select(all_windows: Sequence, window_indices: np.ndarray):
+    if isinstance(all_windows, ds.WindowStore):
+        return all_windows.subset(window_indices)
+    by_index = {ds.window_index_of(item): item for item in all_windows}
+    missing = [int(w) for w in window_indices if int(w) not in by_index]
+    if missing:
+        raise RuntimeError(f"[split_manager] {len(missing)} canonical windows missing from "
+                           "all_windows — pass the full stream from stream_graphs().")
+    return [by_index[int(w)] for w in window_indices]
 
 
 def get_canonical_split(
-    all_windows: List[Tuple],
+    all_windows: Sequence,
     test_fraction: float = cfg.TEST_SPLIT_FRACTION,
     calib_fraction: float = cfg.CALIB_SPLIT_FRACTION,
-    server_attack_fraction: float = 0.05,
+    server_attack_fraction: float = None,
     force_recompute: bool = False,
 ) -> Tuple[List, List, List, List]:
     """
-    Return (calibration_windows, train_windows, test_windows, server_attack_windows) using a single
-    canonical train/test split that is saved to disk and reused across scripts.
+    Return (calibration_windows, train_windows, test_windows, server_attack_windows).
 
-    Parameters
-    ----------
-    all_windows : list of (graph_dict, labels_tensor) tuples in streaming order.
-    test_fraction : fraction of windows held out as test (default 0.20).
-    calib_fraction : fraction of *train* windows used for threshold calibration
-                     (default 0.10). Taken from the start of train_windows.
-    server_attack_fraction : fraction of *attack-containing* windows used for the
-                             server's DC-FLTrust reference direction (default 0.05).
-    force_recompute : if True, discard any saved split and recompute from scratch.
-
-    Returns
-    -------
-    calibration_windows : list (subset of train_windows, used for AE/GNN calibration)
-    train_windows       : list
-    test_windows        : list
-    server_attack_windows: list (never intersects with train or test)
+    The four sets are pairwise disjoint. calibration is NOT a subset of train.
+    server_attack_windows are the attack-containing windows of the server-root
+    blocks (the FLTrust server's labelled attack reserve).
     """
-    total = len(all_windows)
-    if total == 0:
-        raise RuntimeError("get_canonical_split received an empty window list.")
+    if (abs(test_fraction - cfg.TEST_SPLIT_FRACTION) > 1e-9
+            or abs(calib_fraction - cfg.CALIB_SPLIT_FRACTION) > 1e-9):
+        raise ValueError("Split fractions are fixed in config.py "
+                         f"(test={cfg.TEST_SPLIT_FRACTION}, calib={cfg.CALIB_SPLIT_FRACTION}); "
+                         f"got test={test_fraction}, calib={calib_fraction}.")
+    table = ds.load_flow_table()
+    if len(all_windows) != table.n_windows:
+        raise RuntimeError(f"[split_manager] expected all {table.n_windows} windows, "
+                           f"got {len(all_windows)}.")
+    split = ds.compute_split(table=table)
 
-    # ── Load existing split if available ────────────────────────────────────
-    if _SPLIT_FILE.exists() and not force_recompute:
-        data = np.load(_SPLIT_FILE)
-        saved_total = int(data["total"])
-        if saved_total == total and "server_attack_idx" in data:
-            train_idx = data["train_idx"].tolist()
-            test_idx  = data["test_idx"].tolist()
-            server_attack_idx = data["server_attack_idx"].tolist()
-            logger.info(
-                f"[split_manager] Loaded canonical split from {_SPLIT_FILE} "
-                f"(total={total}, train={len(train_idx)}, test={len(test_idx)}, server_attack={len(server_attack_idx)})"
-            )
-            return _build_output(all_windows, train_idx, test_idx, server_attack_idx, calib_fraction)
-        else:
-            logger.warning(
-                f"[split_manager] Saved split mismatch or old format. Recomputing split."
-            )
+    root = split.windows["root"]
+    starts = root * cfg.WINDOW_SIZE
+    labels = np.asarray(table.labels)
+    root_has_attack = np.array([labels[s:s + cfg.WINDOW_SIZE].any() for s in starts])
 
-    # ── Compute stratified chronological split ──────────────────────────────
-    # Attacks are front-loaded in NF-UNSW-NB15-v3; a naive tail-slice would
-    # put 0 attacks in the test set.  Splitting each bucket independently
-    # guarantees both sets contain attacks.
-    attack_idx = [i for i, (_, lbl) in enumerate(all_windows) if lbl.sum() > 0]
-    benign_idx = [i for i, (_, lbl) in enumerate(all_windows) if lbl.sum() == 0]
-
-    # Reserve server attack windows from attack-containing windows (from the middle)
-    n_server = max(1, int(len(attack_idx) * server_attack_fraction))
-    mid = len(attack_idx) // 2
-    server_attack_idx = attack_idx[mid - n_server//2 : mid + n_server//2]
-    
-    # Remaining attack windows
-    remaining_attack_idx = [i for i in attack_idx if i not in set(server_attack_idx)]
-
-    def _chrono_split(indices: list) -> Tuple[list, list]:
-        cut = int(len(indices) * (1.0 - test_fraction))
-        return indices[:cut], indices[cut:]
-
-    atk_train, atk_test = _chrono_split(remaining_attack_idx)
-    ben_train, ben_test = _chrono_split(benign_idx)
-
-    train_idx = sorted(atk_train + ben_train)
-    test_idx  = sorted(atk_test  + ben_test)
-
-    # ── Persist to disk ──────────────────────────────────────────────────────
-    cfg.SPLITS_DIR.mkdir(parents=True, exist_ok=True)
-    np.savez(
-        _SPLIT_FILE,
-        total=np.array(total),
-        train_idx=np.array(train_idx, dtype=np.int64),
-        test_idx=np.array(test_idx,  dtype=np.int64),
-        server_attack_idx=np.array(server_attack_idx, dtype=np.int64),
+    out = (
+        _select(all_windows, split.windows["calib"]),
+        _select(all_windows, split.windows["train"]),
+        _select(all_windows, split.windows["test"]),
+        _select(all_windows, root[root_has_attack]),
     )
-    logger.info(
-        f"[split_manager] Canonical split saved to {_SPLIT_FILE} "
-        f"(total={total}, train={len(train_idx)}, test={len(test_idx)}, server_attack={len(server_attack_idx)})"
-    )
-
-    return _build_output(all_windows, train_idx, test_idx, server_attack_idx, calib_fraction)
-
-
-def _build_output(
-    all_windows: List[Tuple],
-    train_idx: List[int],
-    test_idx: List[int],
-    server_attack_idx: List[int],
-    calib_fraction: float,
-) -> Tuple[List, List, List, List]:
-    """Materialise the window lists and derive the calibration subset."""
-    train_windows = [all_windows[i] for i in train_idx]
-    test_windows  = [all_windows[i] for i in test_idx]
-    server_attack_windows = [all_windows[i] for i in server_attack_idx]
-
-    n_calib = max(5, int(len(train_windows) * calib_fraction))
-    calibration_windows = train_windows[:n_calib]
-
-    logger.info(
-        f"[split_manager] train={len(train_windows)}, "
-        f"test={len(test_windows)}, "
-        f"calib={len(calibration_windows)}, "
-        f"server_attack={len(server_attack_windows)}"
-    )
-
-    # Sanity check — never allow index overlap (would mean data leakage)
-    train_set = set(train_idx)
-    test_set = set(test_idx)
-    server_set = set(server_attack_idx)
-    
-    if train_set & test_set or train_set & server_set or test_set & server_set:
-        raise RuntimeError(
-            f"[split_manager] FATAL: Index overlap detected among train/test/server_attack sets. "
-            "The split is corrupt."
-        )
-
-    return calibration_windows, train_windows, test_windows, server_attack_windows
+    logger.info(f"[split_manager] calib={len(out[0])} train={len(out[1])} "
+                f"test={len(out[2])} server_attack={len(out[3])} "
+                f"(train fraction {split.meta['train_fraction']})")
+    return out

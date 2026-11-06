@@ -54,14 +54,96 @@ LABEL_COL = "Label"
 # Label column is binary: 0 = Benign, 1 = Attack
 BENIGN_LABEL = 0
 
-# Fraction of data to load per CSV (1.0 = all rows; reduce for speed during dev)
-DATA_LOAD_FRACTION = 0.3   # 30 % is enough to demo; use 1.0 for full training
+SEED = 42   # Single seed for split, subsampling, IsolationForest and model init
 
-# Fraction of windows held out for test set in canonical split
-TEST_SPLIT_FRACTION = 0.20
+# ── Canonical split ──────────────────────────────────────────────────────────
+# The WHOLE dataset is always loaded and time-sorted. The timeline is cut into
+# contiguous blocks of SPLIT_BLOCK_WINDOWS windows, and whole blocks are assigned
+# (seeded, stratified by attack era) to four pairwise-disjoint sets. The test,
+# calibration and server-root sets never change with TRAIN_DATA_FRACTION.
+TEST_SPLIT_FRACTION   = 0.20   # held-out evaluation
+CALIB_SPLIT_FRACTION  = 0.10   # threshold calibration (never used for training)
+ROOT_SPLIT_FRACTION   = 0.05   # FLTrust server root: benign root data + attack reserve
+SPLIT_BLOCK_WINDOWS   = 200    # ~12k flows per block; keeps EMA-relevant runs contiguous
 
-# Fraction of train windows used for threshold calibration
-CALIB_SPLIT_FRACTION = 0.10
+# Portion of the TRAINING POOL used for training (seeded, stratified window
+# sample). 1.0 = the full pool. Test/calibration/root are unaffected.
+TRAIN_DATA_FRACTION = 1.0      # 0.3 for development, 1.0 for final paper runs
+DATA_LOAD_FRACTION  = TRAIN_DATA_FRACTION   # deprecated alias for older scripts
+
+# Parsed, time-sorted flow table and transformed feature matrices (memory-mapped)
+CACHE_DIR = BASE_DIR / "cache"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEATURE SPECIFICATION (NF-UNSW-NB15-v3)
+# ─────────────────────────────────────────────────────────────────────────────
+# Measured on the full dataset (2026-10 audit):
+#   * MIN_TTL / MAX_TTL alone separate attacks with AUROC 0.998 (benign TTL=31,
+#     attacks 254/62) — a testbed artefact, so they are OFF for primary results.
+#   * DNS_QUERY_ID is a random transaction id (64k values) — pure noise.
+#   * ICMP_TYPE / ICMP_IPV4_TYPE are non-zero on 74% of non-ICMP flows (ICMP is
+#     0.017% of traffic) — an exporter artefact; PROTOCOL already marks ICMP.
+#   * 29/47 features scale below 0.01 under plain MinMax (heavy tails) → log1p.
+USE_TTL_FEATURES = False
+
+TTL_FEATURES      = ["MIN_TTL", "MAX_TTL"]
+DROPPED_FEATURES  = ["DNS_QUERY_ID", "ICMP_TYPE", "ICMP_IPV4_TYPE"]
+
+# TCP flag bitmasks (max value 31 in this dataset) → one binary feature per bit
+TCP_FLAG_FEATURES = ["TCP_FLAGS", "CLIENT_TCP_FLAGS", "SERVER_TCP_FLAGS"]
+TCP_FLAG_BITS     = {"fin": 1, "syn": 2, "rst": 4, "psh": 8, "ack": 16}
+
+# Categorical codes → one-hot over the listed values + an "other" column.
+# Vocabularies are the most frequent values in the dataset (coverage noted).
+CATEGORICAL_FEATURES = {
+    "PROTOCOL":             [6, 17, 89, 1],                         # 99.9%
+    "L7_PROTO":             [37.0, 36.0, 5.0, 11.0, 7.0, 0.0, 1.0, 92.0],  # 94.5%
+    "DNS_QUERY_TYPE":       [0, 1, 255, 28, 16],                    # 99.99%
+    "FTP_COMMAND_RET_CODE": [0, 229, 125, 230, 331],                # 98.0%
+}
+
+# Every other statistical column is continuous: log1p, then MinMax fitted on
+# training-pool benign flows. Identifiers and labels are never features.
+NON_FEATURE_COLUMNS = [
+    "IPV4_SRC_ADDR", "IPV4_DST_ADDR", "L4_SRC_PORT", "L4_DST_PORT",
+    "FLOW_START_MILLISECONDS", "FLOW_END_MILLISECONDS", "Label", "Attack",
+]
+CONTINUOUS_FEATURES = [
+    "IN_BYTES", "IN_PKTS", "OUT_BYTES", "OUT_PKTS",
+    "FLOW_DURATION_MILLISECONDS", "DURATION_IN", "DURATION_OUT",
+    "LONGEST_FLOW_PKT", "SHORTEST_FLOW_PKT", "MIN_IP_PKT_LEN", "MAX_IP_PKT_LEN",
+    "SRC_TO_DST_SECOND_BYTES", "DST_TO_SRC_SECOND_BYTES",
+    "RETRANSMITTED_IN_BYTES", "RETRANSMITTED_IN_PKTS",
+    "RETRANSMITTED_OUT_BYTES", "RETRANSMITTED_OUT_PKTS",
+    "SRC_TO_DST_AVG_THROUGHPUT", "DST_TO_SRC_AVG_THROUGHPUT",
+    "NUM_PKTS_UP_TO_128_BYTES", "NUM_PKTS_128_TO_256_BYTES",
+    "NUM_PKTS_256_TO_512_BYTES", "NUM_PKTS_512_TO_1024_BYTES",
+    "NUM_PKTS_1024_TO_1514_BYTES", "TCP_WIN_MAX_IN", "TCP_WIN_MAX_OUT",
+    "DNS_TTL_ANSWER",
+    "SRC_TO_DST_IAT_MIN", "SRC_TO_DST_IAT_MAX", "SRC_TO_DST_IAT_AVG", "SRC_TO_DST_IAT_STDDEV",
+    "DST_TO_SRC_IAT_MIN", "DST_TO_SRC_IAT_MAX", "DST_TO_SRC_IAT_AVG", "DST_TO_SRC_IAT_STDDEV",
+] + (TTL_FEATURES if USE_TTL_FEATURES else [])
+
+# Raw CSV columns the preprocessor reads (everything except identifiers/labels)
+RAW_FEATURE_COLUMNS = (
+    CONTINUOUS_FEATURES + TCP_FLAG_FEATURES + list(CATEGORICAL_FEATURES)
+)
+
+
+def _build_feature_names() -> list:
+    names = [c.lower() for c in CONTINUOUS_FEATURES]
+    for col in TCP_FLAG_FEATURES:
+        names += [f"{col.lower()}_{bit}" for bit in TCP_FLAG_BITS]
+    for col, vocab in CATEGORICAL_FEATURES.items():
+        names += [f"{col.lower()}_{v:g}" for v in vocab] + [f"{col.lower()}_other"]
+    return names
+
+
+# Model input columns, in order. FEATURE_DIM is derived — never hand-typed.
+FEATURE_NAMES = _build_feature_names()
+
+# Bump when the preprocessing changes so stale caches / manifests are rejected.
+PREPROCESSING_VERSION = 2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GRAPH / TTL EDGE DECAY
@@ -77,7 +159,7 @@ EDGE_TTL_WINDOWS = 3
 # AUTOENCODER (Layer 1 — Statistical Tripwire)
 # ─────────────────────────────────────────────────────────────────────────────
 
-FEATURE_DIM     = 47    # Number of normalised NetFlow statistical features (NF-UNSW-NB15-v3)
+FEATURE_DIM     = len(FEATURE_NAMES)   # 76 without TTL, 78 with (see FEATURE SPECIFICATION)
 ENCODER_DIMS    = [32, 24]   # Progressive compression (smaller network for 47 features)
 LATENT_DIM      = 16    # Bottleneck: the latent fingerprint space
 DECODER_DIMS    = [24, 32]   # Mirror of encoder (symmetric reconstruction)
@@ -145,6 +227,9 @@ FL_SERVER_ADDRESS   = "localhost:8080"
 FL_NUM_ROUNDS       = 3          # Federation rounds; final round hash is minted
 FL_MIN_CLIENTS      = 5          # All 5 org clients contribute each round
 FL_MIN_AVAILABLE    = 5          # All 5 orgs must be present before round 1
+FL_EXPORT_HORIZON   = 32         # H: the AE update is exported at this optimizer step
+FL_SIM_CLIENT_FLOWS = 12000      # Flows per simulated client: enough benign flows to reach H
+FL_HEAD_EPOCHS      = 3          # Full-batch AttackHead steps per round (client and server root)
 FL_LOCAL_EPOCHS     = 3          # Local AE training epochs per client per FL round (reduced for fast simulation)
 
 # Krum: number of clients to select per round (must be ≤ total clients - 2)
@@ -192,9 +277,14 @@ FLTRUST_MIN_TRUST_SCORE = 0.0   # 0.0 = ReLU only (strict); raise to e.g. 0.05 t
 # ch1 disambiguation threshold for dc_fltrust_aggregate.
 # Clients with ch1 above this are treated as honest (HEALTHY or UNDER_ATTACK);
 # clients below it are treated as Byzantine.
-# Empirically: under H=32 optimization-horizon, honest clients converge to ch1 ~0.11.
-# Calibrated using 1st percentile of honest distribution (target 1% FPR).
-FLTRUST_CH1_THRESHOLD = 0.0023
+# The first two are the 5th percentile of honest client scores over 20 rounds at
+# 100% training data and the P99 routing cut, channel 2 counted after warmup
+# (scripts/final_federation.py). Recalibrate if G0, the routing cut, the round
+# recipe or the client data change.
+FLTRUST_CH1_THRESHOLD = 0.0173
+CH2_ANTI_ALIGN_THRESHOLD = 0.492  # ch2 cosine below this: head update is adversarial
+# Not calibrated, and nothing acts on the label it sets.
+CH2_UNDER_ATTACK_THRESHOLD = 0.5  # ch2 cosine above this: client is under real attack
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RESPONSE ENGINE — Critical Infrastructure Allowlist
@@ -314,6 +404,13 @@ IF_CONTAMINATION = 0.02   # 2 % — removes extreme statistical outliers
 # ─────────────────────────────────────────────────────────────────────────────
 
 DASHBOARD_REFRESH_INTERVAL_MS = 1500   # Streamlit auto-refresh period
+MAX_ALERTS_CACHE              = 30     # Alerts kept in the dashboard session
+MAX_INCIDENTS_CACHE           = 20     # Response incidents kept in the dashboard session
+PENDING_INJECT_FRESHNESS_SEC  = 30     # pending_inject.json older than this is ignored
+LAST_EXPLANATION_FRESHNESS_SEC = 30    # last_explanation.json older than this is ignored
+CUSTOM_INJECT_AE_THRESHOLD    = 0.3    # ae_threshold recorded on CUSTOM_INJECT events
+NODE_STATE_EVALUATING_SIMPLE  = "Evaluating…"
+NODE_STATE_EVALUATING_ICON    = "⚡ Evaluating…"
 ALERT_LOG_FILE = str(LOGS_DIR / "aura_alerts.jsonl")
 EVENT_LOG_FILE = str(LOGS_DIR / "aura_events.jsonl")
 
@@ -358,84 +455,13 @@ MITM_NOISE_STD: float = 0.01
 # CUSTOM INJECTION CONFIGURATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-# NetFlow feature index lookup — used by _run_inject_inference() in api_server.py
-# to resolve feature names to their column positions without hardcoding integers.
-# Derived from NF-UNSW-NB15-v3 schema (IPs, ports, timestamps, Label, Attack stripped).
-#
-# Feature column order (47 features, 0-indexed):
-#   0:  PROTOCOL                    1:  L7_PROTO
-#   2:  IN_BYTES                    3:  IN_PKTS
-#   4:  OUT_BYTES                   5:  OUT_PKTS
-#   6:  TCP_FLAGS                   7:  CLIENT_TCP_FLAGS
-#   8:  SERVER_TCP_FLAGS            9:  FLOW_DURATION_MILLISECONDS
-#  10:  DURATION_IN                11:  DURATION_OUT
-#  12:  MIN_TTL                    13:  MAX_TTL
-#  14:  LONGEST_FLOW_PKT           15:  SHORTEST_FLOW_PKT
-#  16:  MIN_IP_PKT_LEN             17:  MAX_IP_PKT_LEN
-#  18:  SRC_TO_DST_SECOND_BYTES    19:  DST_TO_SRC_SECOND_BYTES
-#  20:  RETRANSMITTED_IN_BYTES     21:  RETRANSMITTED_IN_PKTS
-#  22:  RETRANSMITTED_OUT_BYTES    23:  RETRANSMITTED_OUT_PKTS
-#  24:  SRC_TO_DST_AVG_THROUGHPUT  25:  DST_TO_SRC_AVG_THROUGHPUT
-#  26:  NUM_PKTS_UP_TO_128_BYTES   27:  NUM_PKTS_128_TO_256_BYTES
-#  28:  NUM_PKTS_256_TO_512_BYTES  29:  NUM_PKTS_512_TO_1024_BYTES
-#  30:  NUM_PKTS_1024_TO_1514_BYTES
-#  31:  TCP_WIN_MAX_IN             32:  TCP_WIN_MAX_OUT
-#  33:  ICMP_TYPE                  34:  ICMP_IPV4_TYPE
-#  35:  DNS_QUERY_ID               36:  DNS_QUERY_TYPE
-#  37:  DNS_TTL_ANSWER             38:  FTP_COMMAND_RET_CODE
-#  39:  SRC_TO_DST_IAT_MIN         40:  SRC_TO_DST_IAT_MAX
-#  41:  SRC_TO_DST_IAT_AVG         42:  SRC_TO_DST_IAT_STDDEV
-#  43:  DST_TO_SRC_IAT_MIN         44:  DST_TO_SRC_IAT_MAX
-#  45:  DST_TO_SRC_IAT_AVG         46:  DST_TO_SRC_IAT_STDDEV
-FEATURE_INDEX_MAP: dict = {
-    "protocol":                 0,
-    "l7_proto":                 1,
-    "in_bytes":                 2,
-    "in_pkts":                  3,
-    "out_bytes":                4,
-    "out_pkts":                 5,
-    "tcp_flags":                6,
-    "client_tcp_flags":         7,
-    "server_tcp_flags":         8,
-    "flow_duration":            9,
-    "duration_in":              10,
-    "duration_out":             11,
-    "min_ttl":                  12,
-    "max_ttl":                  13,
-    "longest_flow_pkt":         14,
-    "shortest_flow_pkt":        15,
-    "min_ip_pkt_len":           16,
-    "max_ip_pkt_len":           17,
-    "src_to_dst_second_bytes":  18,
-    "dst_to_src_second_bytes":  19,
-    "retransmitted_in_bytes":   20,
-    "retransmitted_in_pkts":    21,
-    "retransmitted_out_bytes":  22,
-    "retransmitted_out_pkts":   23,
-    "src_to_dst_avg_throughput": 24,
-    "dst_to_src_avg_throughput": 25,
-    "num_pkts_up_to_128_bytes": 26,
-    "num_pkts_128_to_256_bytes": 27,
-    "num_pkts_256_to_512_bytes": 28,
-    "num_pkts_512_to_1024_bytes": 29,
-    "num_pkts_1024_to_1514_bytes": 30,
-    "tcp_win_max_in":           31,
-    "tcp_win_max_out":          32,
-    "icmp_type":                33,
-    "icmp_ipv4_type":           34,
-    "dns_query_id":             35,
-    "dns_query_type":           36,
-    "dns_ttl_answer":           37,
-    "ftp_command_ret_code":     38,
-    "src_to_dst_iat_min":       39,
-    "src_to_dst_iat_max":       40,
-    "src_to_dst_iat_avg":       41,
-    "src_to_dst_iat_stddev":    42,
-    "dst_to_src_iat_min":       43,
-    "dst_to_src_iat_max":       44,
-    "dst_to_src_iat_avg":       45,
-    "dst_to_src_iat_stddev":    46,
-}
+# Feature name → model-input column index, generated from FEATURE_NAMES.
+# Used by api_server._run_inject_inference() and the attack-corruption profiles
+# to address features by name. Generated so it can never drift from the
+# preprocessor's actual column order.
+FEATURE_INDEX_MAP: dict = {name: i for i, name in enumerate(FEATURE_NAMES)}
+# Short alias used by the injection profiles
+FEATURE_INDEX_MAP["flow_duration"] = FEATURE_INDEX_MAP["flow_duration_milliseconds"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DYNAMIC AE THRESHOLD LOADER
@@ -525,28 +551,44 @@ _ae_thresh_high, _ae_thresh_medium, AE_THRESHOLDS_CALIBRATED = load_ae_threshold
 
 MSE_THRESHOLD_HIGH   = _ae_thresh_high    # EMA-UCL P99 of benign MSE distribution
 MSE_THRESHOLD_MEDIUM = _ae_thresh_medium  # EMA-UCL P90 of benign MSE distribution
-def load_ch2_split_threshold() -> float:
+
+# Sentinel CH2 split used ONLY before calibration has ever been run, for the
+# same bootstrap reason as _SENTINEL_THRESHOLD_* above (train.py and
+# calibrate_thresholds.py must be able to import config on a fresh clone).
+_SENTINEL_CH2_SPLIT_THRESHOLD = 0.01
+
+
+def load_ch2_split_threshold() -> tuple[float, bool]:
+    """
+    Load CH2_MSE_SPLIT_THRESHOLD from calibration_results.json.
+
+    Returns (threshold, calibrated). `calibrated` is False only when the
+    calibration file does not exist yet and the sentinel is returned.
+    DC-FLTrust entry points enforce calibration via preflight_dc_fltrust_check().
+    """
     if not _CALIB_JSON_PATH.exists():
-        raise FileNotFoundError(
-            f"Threshold calibration file missing: {_CALIB_JSON_PATH}. "
-            "Run calibrate_thresholds.py before starting the system."
+        _cfg_log.warning(
+            "[CONFIG] ⚠️  logs/calibration_results.json NOT FOUND. Using SENTINEL "
+            "CH2_MSE_SPLIT_THRESHOLD so config.py can be imported. Not valid for "
+            "federation or the paper. Run: `python calibrate_thresholds.py`."
         )
+        return _SENTINEL_CH2_SPLIT_THRESHOLD, False
     try:
         data = json.loads(_CALIB_JSON_PATH.read_text())
         if "CH2_MSE_SPLIT_THRESHOLD" not in data:
             raise KeyError("CH2_MSE_SPLIT_THRESHOLD missing from calibration file.")
-        return float(data["CH2_MSE_SPLIT_THRESHOLD"])
+        return float(data["CH2_MSE_SPLIT_THRESHOLD"]), True
     except Exception as e:
         raise ValueError(f"Failed to read CH2_MSE_SPLIT_THRESHOLD from calibration: {e}")
 
 # DC-FLTrust two-pass split threshold
 # Flows above this threshold are considered potentially anomalous 
 # and routed to AttackHead for channel 2 analysis.
-# This is intentionally lower than MSE_THRESHOLD_HIGH (response engine)
-# because we want AttackHead to see all suspicious flows, not just
-# the most extreme ones. Set to P75 of benign MSE distribution.
+# Set to P99 of benign MSE, the same point as MSE_THRESHOLD_HIGH. A lower cut
+# withholds hard benign flows from the AE every round, and its error on them grows
+# until attacks fall below the alarm threshold (scripts/ae_routing_cut.py).
 # Updated automatically by calibrate_thresholds.py alongside other thresholds.
-CH2_MSE_SPLIT_THRESHOLD = load_ch2_split_threshold()
+CH2_MSE_SPLIT_THRESHOLD, CH2_SPLIT_CALIBRATED = load_ch2_split_threshold()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA-DRIVEN ATTACK CORRUPTION PROFILES
@@ -726,6 +768,17 @@ def load_attack_corruption_profiles() -> dict:
             profiles[profile_key] = _SENTINEL_ATTACK_PROFILES.get(profile_key, {})
             continue
 
+        if len(p05) != FEATURE_DIM:
+            # Stats were written for a different feature layout; positional
+            # percentiles would be paired with the wrong feature names.
+            _cfg_log.warning(
+                f"[CONFIG] attack_class_stats.json has {len(p05)} features, model has "
+                f"{FEATURE_DIM}. Re-run scripts/train_explainer.py. Using sentinel "
+                f"profile for '{profile_key}'."
+            )
+            profiles[profile_key] = _SENTINEL_ATTACK_PROFILES.get(profile_key, {})
+            continue
+
         # Convert: only include features present in FEATURE_INDEX_MAP
         feature_profile: dict = {}
         for feat_idx, feat_key in idx_to_key.items():
@@ -761,11 +814,17 @@ def preflight_dc_fltrust_check():
     from datetime import datetime
     
     stats_path = MODELS_DIR / "attack_class_stats.json"
-    
+
     if not stats_path.exists():
         raise RuntimeError(
             f"[PREFLIGHT FAIL] attack_class_stats.json missing at {stats_path}. "
             "Run train_explainer.py first."
+        )
+
+    if not (AE_THRESHOLDS_CALIBRATED and CH2_SPLIT_CALIBRATED):
+        raise RuntimeError(
+            f"[PREFLIGHT FAIL] {_CALIB_JSON_PATH} missing — AE / CH2 thresholds are "
+            "sentinel values. Run train.py then calibrate_thresholds.py first."
         )
     
     mtime = os.path.getmtime(stats_path)
@@ -779,4 +838,3 @@ def preflight_dc_fltrust_check():
     print(f"  Attack classes present: {list(profiles.keys())}")
     print(f"  This timestamp should match your most recent train_explainer.py run.")
     return True
-CH2_WARMUP_ROUNDS = 10

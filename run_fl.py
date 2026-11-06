@@ -2,10 +2,9 @@
 import sys
 sys.path.insert(0, ".")
 
-from aura.blockchain import AURABlockchainLogger
 from aura.fl_server import run_federation_simulation
 
-results = run_federation_simulation(blockchain_module=AURABlockchainLogger())
+results = run_federation_simulation()
 
 print("\n=== ROUND SUMMARY ===")
 for r in results:

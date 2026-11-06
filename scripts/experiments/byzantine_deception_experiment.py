@@ -57,7 +57,7 @@ def _run_latent_inversion_byzantine(
     # This guarantees mathematical identity with honest clients.
     _, n_benign, n_attack, _, ch1_export_state = run_two_pass_local_training(
         ae, attack_head, all_flows, ae_optimizer, head_optimizer,
-        mse_threshold=mse_threshold_high, head_epochs=0, batch_size=256
+        mse_threshold=mse_threshold_high, head_epochs=0, batch_size=256, local_epochs=cfg.FL_LOCAL_EPOCHS
     )
 
     # Re-compute mask to avoid modifying the subsequent AttackHead code

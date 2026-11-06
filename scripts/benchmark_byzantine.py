@@ -34,7 +34,9 @@ import torch.nn as nn
 import numpy as np
 import io
 
-from aura.fl_server import fltrust_aggregate, krum_select, krum_aggregate, _build_root_dataset
+from aura.fl_server import fltrust_aggregate, krum_select, krum_aggregate, _build_root_dataset, get_federated_parameters
+from aura import fl_round
+from aura.root_gradient import attack_flows_from_windows
 from aura.fl_client import AURAFlowerClient
 from aura.data_loader import CICIDSDataLoader, load_client_partition
 from aura.attack_injector import _benign_profile
@@ -65,35 +67,20 @@ def initialize_benchmark_data():
     global _loader, _shared_scaler, server_attack_windows, _all_train_flows, _client_pool
     _loader = CICIDSDataLoader()
     try:
-        import joblib
-        import os
-        scaler_path = os.path.join(cfg.MODELS_DIR, "scaler.joblib")
-        if os.path.exists(scaler_path):
-            _shared_scaler = joblib.load(scaler_path)
-            logger.info("Loaded saved global dataset scaler.")
-        else:
-            _shared_scaler = _loader.fit_scaler()
-            logger.info("Global dataset scaler initialized successfully (fitted on fly).")
-        
+        from aura import dataset as ds
         from aura.split_manager import get_canonical_split
 
-        # Load all windows
-        all_windows = list(_loader.stream_graphs(_shared_scaler))
+        ds.check_manifest()
+        _shared_scaler = ds.load_preprocessor()
 
-        # Get canonical train/test split
-        calib_windows, train_windows, test_windows, server_attack_windows = get_canonical_split(
-            all_windows, test_fraction=0.20
-        )
-        
-        # CRITICAL: calibration_windows are a prefix of train_windows.
-        # To guarantee zero data leakage between the server's root dataset
-        # (built from calib_windows) and client training data, we must remove them.
-        train_windows = train_windows[len(calib_windows):]
+        # Server attack reserve (root blocks); the server's benign root data is
+        # built separately by _build_root_dataset() from the same root blocks.
+        _, _, _, server_attack_windows = get_canonical_split(_loader.stream_graphs(_shared_scaler))
 
-        # Extract ALL flows from train windows, randomised once for reproducibility
-        _all_train_flows = torch.cat([
-            graph['edge_attr'] for graph, labels in train_windows
-        ])
+        # Client data: de-duplicated TRAINING flows (natural benign/attack mix),
+        # disjoint from test, calibration and server-root flows by construction.
+        split = ds.compute_split()
+        _all_train_flows = ds.flows_tensor(split.flows["train"], _shared_scaler)
         _all_train_flows = _all_train_flows[torch.randperm(len(_all_train_flows))]
 
         # --- Privacy-preserving partition boundary ---
@@ -148,7 +135,6 @@ def generate_client_data(
         f"[generate_client_data] Client {client_idx}: "
         f"train={len(train_data)} flows, val={len(val_data)} flows"
     )
-    print(f"[CLIENT DATA] Client {client_idx} using shared scaler instance: {id(_shared_scaler)}")
 
     if is_rare:
         # Legitimate but distribution-shifted client (e.g. hospital with rare traffic).
@@ -181,11 +167,11 @@ def _run_local_training(
       3. Return updated weight arrays + training loss.
     """
     with torch.no_grad():
-        for p, arr in zip(client.model.parameters(), global_arrays):
+        for p, arr in zip(get_federated_parameters(client.model), global_arrays):
             p.copy_(torch.tensor(arr, dtype=torch.float32))
 
     num_examples, train_loss = client._local_train()
-    updated_arrays = [p.detach().cpu().numpy() for p in client.model.parameters()]
+    updated_arrays = [p.detach().cpu().numpy() for p in get_federated_parameters(client.model)]
     return updated_arrays, train_loss
 
 
@@ -227,25 +213,6 @@ def _run_local_training_dual(
     return ae_delta, head_delta, z_buffer, n_benign, n_high_mse
 
 
-
-
-def _run_local_training(
-    client:        AURAFlowerClient,
-    global_arrays: List[np.ndarray],
-) -> Tuple[List[np.ndarray], float]:
-    """
-    One FL round on a single client (in-process, no gRPC needed):
-      1. Load global weights into client's local model.
-      2. Run FL_LOCAL_EPOCHS of unsupervised AE training.
-      3. Return updated weight arrays + training loss.
-    """
-    with torch.no_grad():
-        for p, arr in zip(client.model.parameters(), global_arrays):
-            p.copy_(torch.tensor(arr, dtype=torch.float32))
-
-    num_examples, train_loss = client._local_train()
-    updated_arrays = [p.detach().cpu().numpy() for p in client.model.parameters()]
-    return updated_arrays, train_loss
 
 
 def run_experiment(
@@ -312,124 +279,29 @@ def run_experiment(
         )
         clients.append(AURAFlowerClient(f"client_{idx}", train_data, val_data))
 
-    # Shared global model
-    import os
-    global_model  = AURAModelBundle()
-    
-    # Load full pretrained bundle (so STGNN is also preserved, not random!)
-    bundle_path = cfg.MODELS_DIR / 'aura_bundle.pth'
-    if not bundle_path.exists():
-        raise FileNotFoundError(
-            f"Pretrained bundle not found at {bundle_path}. "
-            "Run train.py before benchmark_byzantine.py."
-        )
-    state = torch.load(bundle_path, map_location='cpu', weights_only=True)
-    incompatible_keys = global_model.load_state_dict(state, strict=False)
-    if incompatible_keys.missing_keys or incompatible_keys.unexpected_keys:
-        logger.warning(f"[INIT] Checkpoint mismatches found in {bundle_path}:")
-        if incompatible_keys.missing_keys:
-            logger.warning(f"       Missing keys: {incompatible_keys.missing_keys}")
-        if incompatible_keys.unexpected_keys:
-            logger.warning(f"       Unexpected keys: {incompatible_keys.unexpected_keys}")
-        
-        # Fail loudly if ANY autoencoder keys are missing, as that breaks Channel 1
-        ae_missing = [k for k in incompatible_keys.missing_keys if k.startswith('autoencoder')]
-        if ae_missing:
-            raise RuntimeError(f"Architecture mismatch! Missing Autoencoder keys: {ae_missing}")
-            
-    global_model.autoencoder.eval()
-    logger.info(f"[INIT] Loaded pretrained bundle from {bundle_path}")
+    # Shared global model (G0)
+    global_model = fl_round.load_global_model()
 
-    global_arrays = [p.detach().cpu().numpy() for p in global_model.parameters()]
+    # The STGNN is organisation-local: only AE and AttackHead are federated.
+    global_arrays = [p.detach().cpu().numpy() for p in get_federated_parameters(global_model)]
 
     # FLTrust server root dataset (benign reference -- built once per experiment)
-    root_data, _ = _build_root_dataset(_shared_scaler, n_samples=2000)
+    root_data, _ = _build_root_dataset(_shared_scaler, n_samples=cfg.FLTRUST_ROOT_SAMPLES)
+    root_attack_flows = attack_flows_from_windows(server_attack_windows)
 
     # Federated rounds
-    from aura.attack_reference import AttackReferenceBuffer
-    if mode in ["joint_dual", "dc_fltrust"]:
-        logger.debug(f"[{mode}] CH2 MSE split threshold: {cfg.CH2_MSE_SPLIT_THRESHOLD:.6f} "
-              f"(P75 of benign distribution — flows above this route to AttackHead)")
-              
-        attack_ref_buffer = AttackReferenceBuffer(
-            max_size=cfg.CH2_REF_BUFFER_MAX,
-            min_size_to_use=cfg.CH2_REF_BUFFER_MIN
-        )
-        
-        # Diagnostic
-        ae = global_model.autoencoder
-        ae.eval()
-        with torch.no_grad():
-            sample = clients[0].train_data[:100]
-            recon, _ = ae(sample)
-            mse = F.mse_loss(recon, sample, reduction='none').mean(dim=1)
-            all_mse = mse.cpu().numpy()
-        ae.train()
-
-        above_threshold = (all_mse > cfg.CH2_MSE_SPLIT_THRESHOLD).sum()
-        logger.debug(f"[INIT] Sanity check: {above_threshold}/100 flows above CH2 threshold "
-              f"(expected ~25 for P75 threshold)")
-        logger.debug(f"  MSE range: [{all_mse.min():.6f}, {all_mse.max():.6f}]")
-        logger.debug(f"  MSE P75: {np.percentile(all_mse, 75):.6f}")
-        logger.debug(f"  MSE P90: {np.percentile(all_mse, 90):.6f}")
-        logger.debug(f"  MSE P99: {np.percentile(all_mse, 99):.6f}")
-    else:
-        attack_ref_buffer = None
-        
     for rnd in range(1, num_rounds + 1):
         print("\n" + "-" * 60)
         print(f"  [{strategy_name} | {byzantine_ratio*100:.0f}% Byzantine] Round {rnd}/{num_rounds}")
         print("-" * 60)
 
-        # Each client trains locally
+        # FedAvg/Krum clients train here; the FLTrust family trains in its own branch.
         client_updates: List[List[np.ndarray]] = []
-        c_ae_deltas = []
-        c_head_deltas = []
-        round_z_submissions = {}
-        
-        for idx, client in enumerate(clients):
-            is_byzantine = (roles[idx] == "byzantine")
-            if mode == "dual_channel":
-                global_ae_weights = {k: global_model.autoencoder.state_dict()[k].clone() for k in global_model.autoencoder.state_dict()}
-                global_head_weights = {k: global_model.attack_head.state_dict()[k].clone() for k in global_model.attack_head.state_dict()}
-                
-                ae_opt = torch.optim.Adam(client.model.autoencoder.parameters(), lr=1e-3)
-                head_opt = torch.optim.Adam(client.model.attack_head.parameters(), lr=1e-3)
-                
-                with torch.no_grad():
-                    for p, arr in zip(client.model.autoencoder.parameters(), global_model.autoencoder.parameters()):
-                        p.copy_(arr)
-                    for p, arr in zip(client.model.attack_head.parameters(), global_model.attack_head.parameters()):
-                        p.copy_(arr)
-                
-                ae_delta, head_delta, z_buffer, n_benign, n_high_mse = _run_local_training_dual(
-                    ae=client.model.autoencoder,
-                    attack_head=client.model.attack_head,
-                    all_flows=client.train_data,
-                    ae_optimizer=ae_opt,
-                    head_optimizer=head_opt,
-                    global_ae_weights=global_ae_weights,
-                    global_head_weights=global_head_weights,
-                    mse_threshold_high=cfg.CH2_MSE_SPLIT_THRESHOLD,
-                    head_epochs=3
-                )
-                c_ae_deltas.append(ae_delta)
-                c_head_deltas.append(head_delta)
-                round_z_submissions[idx] = z_buffer
-                
-                logger.info(
-                    f"Client {idx} round {rnd}: "
-                    f"benign_flows={n_benign}, high_mse_flows={n_high_mse}, "
-                    f"z_buffer_size={sum(len(z) for z in z_buffer)}"
-                )
-                train_loss = 0.0
-                updated_arrays = [p.detach().cpu().numpy() for p in client.model.parameters()]
-            else:
+        if strategy_name in ("FedAvg", "Krum"):
+            for idx, client in enumerate(clients):
                 updated_arrays, train_loss = _run_local_training(client, global_arrays)
-                
-            role_tag = roles[idx]
-            print(f"  Client {idx:2d} [{role_tag:10s}]  train_loss={train_loss:.4f}")
-            client_updates.append(updated_arrays)
+                print(f"  Client {idx:2d} [{roles[idx]:10s}]  train_loss={train_loss:.4f}")
+                client_updates.append(updated_arrays)
 
         # Aggregation strategy
         if strategy_name == "FedAvg":
@@ -469,145 +341,51 @@ def run_experiment(
         else:
             # FLTrust cosine-trust aggregation
             with torch.no_grad():
-                for p, arr in zip(global_model.parameters(), global_arrays):
+                for p, arr in zip(get_federated_parameters(global_model), global_arrays):
                     p.copy_(torch.tensor(arr, dtype=torch.float32))
 
-            from aura.fl_server import ae_only_fltrust_aggregate, joint_dual_fltrust_aggregate, dc_fltrust_aggregate
-            
-            root_ae = FlowAutoencoder()
-            root_head = AttackHead()
-            import os
-            assert os.path.exists('saved_models/autoencoder_best.pth'), \
-                "Pretrained AE must exist before computing root gradient"
-            
-            # CRITICAL: Must use EXACTLY the same weights the clients start from this round.
-            # global_model has the latest federated weights (which in round 1 is the pretrained bundle).
-            root_ae.load_state_dict(global_model.autoencoder.state_dict())
-            root_head.load_state_dict(global_model.attack_head.state_dict())
-            
-            print(f"[ROOT] Loaded pretrained AE for root gradient computation")
-            root_ae_opt = torch.optim.Adam(root_ae.parameters(), lr=1e-3)
-            root_head_opt = torch.optim.Adam(root_head.parameters(), lr=1e-3)
-            
-            g_ae_w = {k: v.clone() for k, v in global_model.autoencoder.state_dict().items()}
-            g_head_w = {k: v.clone() for k, v in global_model.attack_head.state_dict().items()}
-            
-            # ── Strategy B: Symmetric Mini-batch root AE reference ────────────
-            # The server's AE reference must execute the same optimization trajectory
-            # as an honest client in one FL round. We wrap root_data in a DataLoader
-            # exactly like run_two_pass_local_training.
+            from aura.fl_server import ae_only_fltrust_aggregate, joint_dual_fltrust_aggregate
 
-            # Pass 0: classify flows without updating weights
-            root_ae.eval()
-            with torch.no_grad():
-                _recon_pass0, _ = root_ae(root_data)
-                mse_per_root_flow = F.mse_loss(_recon_pass0, root_data, reduction='none').mean(dim=1)
-            
-            root_benign_mask = mse_per_root_flow < cfg.CH2_MSE_SPLIT_THRESHOLD
-            filtered_root_data = root_data[root_benign_mask]
-            
-            discarded_root_data = root_data[~root_benign_mask]
-            kept_mse = mse_per_root_flow[root_benign_mask]
-            discarded_mse = mse_per_root_flow[~root_benign_mask]
-            
-            print(f"[ROOT DIAGNOSTICS]")
-            print(f"  Initial root samples:    {len(root_data)}")
-            print(f"  Filtered root samples:   {len(filtered_root_data)}")
-            print(f"  Discarded root samples:  {len(discarded_root_data)}")
-            print(f"  Percentage discarded:    {100.0 * len(discarded_root_data) / len(root_data):.2f}%")
-            if len(kept_mse) > 0: print(f"  Mean kept MSE:           {kept_mse.mean().item():.6f}")
-            if len(discarded_mse) > 0: print(f"  Mean discarded MSE:      {discarded_mse.mean().item():.6f}")
+            g_ae_w = fl_round.snapshot(global_model.autoencoder)
+            g_head_w = fl_round.snapshot(global_model.attack_head)
 
-            actual_bs = min(cfg.AE_BATCH_SIZE, len(filtered_root_data)) if cfg.AE_BATCH_SIZE > 0 else len(filtered_root_data)
-            if len(filtered_root_data) > 0:
-                root_loader = torch.utils.data.DataLoader(
-                    torch.utils.data.TensorDataset(filtered_root_data),
-                    batch_size=actual_bs, shuffle=True
-                )
-            else:
-                root_loader = []
-                
-            print(f"[ROOT] Strategy B: Symmetric Mini-batch AE steps "
-                  f"(root={len(filtered_root_data)}, bs={actual_bs})")
-            
-            root_ae.train()
-            ch1_export_state = None
-            step_count = 0
-            
-            for (batch,) in root_loader:
-                root_ae_opt.zero_grad()
-                _recon, _ = root_ae(batch)
-                _ae_loss = F.mse_loss(_recon, batch)
-                _ae_loss.backward()
-                root_ae_opt.step()
-                
-                step_count += 1
-                if step_count == 32:
-                    ch1_export_state = {k: v.clone() for k, v in root_ae.state_dict().items()}
-                    
-            if ch1_export_state is None:
-                ch1_export_state = {k: v.clone() for k, v in root_ae.state_dict().items()}
-            
-            r_ae_delta = {k: ch1_export_state[k] - g_ae_w[k]
-                          for k in g_ae_w}
-            
-            from aura.root_gradient import _build_root_head_reference
-            r_head_delta = _build_root_head_reference(
-                server_attack_windows=server_attack_windows,
-                ae=global_model.autoencoder,
-                global_head_weights=g_head_w,
-                mse_threshold=cfg.CH2_MSE_SPLIT_THRESHOLD
-            )
-            
+            r_ae_delta, r_head_delta = fl_round.root_reference(g_ae_w, g_head_w, root_data, root_attack_flows)
+
             c_ae_deltas = []
             c_head_deltas = []
-            round_z_submissions = {}
-            
+
             from scripts.experiments.byzantine_deception_experiment import _run_latent_inversion_byzantine, _run_true_labelflip_byzantine
-            
+
             for idx, client in enumerate(clients):
                 is_byzantine = (roles[idx] == "byzantine")
-                
-                ae_opt = torch.optim.Adam(client.model.autoencoder.parameters(), lr=1e-3)
-                head_opt = torch.optim.Adam(client.model.attack_head.parameters(), lr=1e-3)
-                
-                with torch.no_grad():
-                    for p, arr in zip(client.model.autoencoder.parameters(), global_model.autoencoder.parameters()):
-                        p.copy_(arr)
-                    for p, arr in zip(client.model.attack_head.parameters(), global_model.attack_head.parameters()):
-                        p.copy_(arr)
-                        
-                if is_byzantine and attack_mode == 'latent_inversion':
-                    ae_delta, head_delta, z_buffer, n_benign, n_attack = _run_latent_inversion_byzantine(
+
+                if is_byzantine and attack_mode in ('latent_inversion', 'true_labelflip'):
+                    run_attack = (_run_latent_inversion_byzantine if attack_mode == 'latent_inversion'
+                                  else _run_true_labelflip_byzantine)
+                    client.model.autoencoder.load_state_dict(g_ae_w)
+                    client.model.attack_head.load_state_dict(g_head_w)
+                    ae_opt = torch.optim.Adam(client.model.autoencoder.parameters(), lr=cfg.AE_LEARNING_RATE)
+                    head_opt = torch.optim.Adam(client.model.attack_head.parameters(), lr=cfg.AE_LEARNING_RATE)
+                    ae_delta, head_delta, _, n_benign, n_attack = run_attack(
                         client.model.autoencoder, client.model.attack_head, client.train_data, ae_opt, head_opt,
-                        g_ae_w, g_head_w, mse_threshold_high=cfg.CH2_MSE_SPLIT_THRESHOLD, head_epochs=3
-                    )
-                elif is_byzantine and attack_mode == 'true_labelflip':
-                    ae_delta, head_delta, z_buffer, n_benign, n_attack = _run_true_labelflip_byzantine(
-                        client.model.autoencoder, client.model.attack_head, client.train_data, ae_opt, head_opt,
-                        g_ae_w, g_head_w, mse_threshold_high=cfg.CH2_MSE_SPLIT_THRESHOLD, head_epochs=3
+                        g_ae_w, g_head_w, mse_threshold_high=cfg.CH2_MSE_SPLIT_THRESHOLD, head_epochs=cfg.FL_HEAD_EPOCHS
                     )
                 else:
-                    ae_delta, head_delta, z_buffer, n_benign, n_attack = _run_local_training_dual(
-                        client.model.autoencoder, client.model.attack_head, client.train_data, ae_opt, head_opt,
-                        g_ae_w, g_head_w, mse_threshold_high=cfg.CH2_MSE_SPLIT_THRESHOLD, head_epochs=3
-                    )
-                    
+                    u = fl_round.client_update(client.model.autoencoder, client.model.attack_head,
+                                               g_ae_w, g_head_w, client.train_data)
+                    ae_delta, head_delta, n_benign, n_attack = u.ae_delta, u.head_delta, u.n_benign, u.n_high_mse
+
                 c_ae_deltas.append(ae_delta)
                 c_head_deltas.append(head_delta)
-                round_z_submissions[idx] = z_buffer
-                
+
                 logger.info(
                     f"Client {idx} round {rnd}: "
-                    f"benign_flows={n_benign}, high_mse_flows={n_attack}, "
-                    f"z_buffer_size={sum(len(z) for z in z_buffer)}"
+                    f"benign_flows={n_benign}, high_mse_flows={n_attack}"
                 )
-            
+
             client_round_counts = [rnd] * num_clients
 
             import torch.nn.functional as F_func
-            def _flat_norm(d):
-                return torch.cat([v.flatten() for v in d.values()]).norm()
             def _cos(d1, d2):
                 t1 = torch.cat([v.flatten() for v in d1.values()])
                 t2 = torch.cat([v.flatten() for v in d2.values()])
@@ -641,9 +419,6 @@ def run_experiment(
                     }, f)
                 logger.info(f"[EXPORT] Saved tensors and benchmark metrics to {export_path}")
 
-            root_head_flat = torch.cat([v.flatten() for v in r_head_delta.values()])
-            print(f"[DIAGNOSTIC] root_head_delta norm: {root_head_flat.norm():.6f}")
-            print(f"[DIAGNOSTIC] root_ae_delta norm: {torch.cat([v.flatten() for v in r_ae_delta.values()]).norm():.6f}")
             
             if mode == 'ae_only':
                 new_ae, trust_scores = ae_only_fltrust_aggregate(
@@ -662,25 +437,9 @@ def run_experiment(
                 classifications = ['HEALTHY' if t > 0.0 else 'BYZANTINE' for t in trust_scores]
             else:
                 # mode == 'dc_fltrust'
-                print(f"Root AE delta norm: {_flat_norm(r_ae_delta):.6f}")
-                print(f"Root AttackHead delta norm: {_flat_norm(r_head_delta):.6f}")
-                print("--- BENCHMARK PRE-AGGREGATION DIAGNOSTICS ---")
-                
-                for idx, (ae_d, h_d, role) in enumerate(zip(c_ae_deltas, c_head_deltas, roles)):
-                    raw_cos = _cos(r_ae_delta, ae_d)
-                    relu_cos = benchmark_ch1[idx]
-                    ch2_cos = _cos(r_head_delta, h_d) if h_d is not None else 0.0
-                    print(f"Client {idx} | Role: {role} | Raw: {raw_cos:.6f} | ReLU: {relu_cos:.6f} | Ch2: {ch2_cos:.6f}")
-                print("---------------------------------------------")
 
-                new_ae, new_head, ch1_scores, ch2_scores, classifications, exclusion_flags = dc_fltrust_aggregate(
-                    c_ae_deltas, c_head_deltas, r_ae_delta, r_head_delta, client_round_counts,
-                    ch2_warmup_rounds=cfg.CH2_WARMUP_ROUNDS,
-                    round_z_submissions=round_z_submissions,
-                    attack_ref_buffer=attack_ref_buffer,
-                    current_round=rnd,
-                    reference_attack_head=global_model.attack_head,
-                    ch1_threshold=cfg.FLTRUST_CH1_THRESHOLD
+                new_ae, new_head, ch1_scores, ch2_scores, classifications, exclusion_flags = fl_round.aggregate(
+                    c_ae_deltas, c_head_deltas, r_ae_delta, r_head_delta, rnd
                 )
                 trust_scores = ch1_scores
 
@@ -693,7 +452,7 @@ def run_experiment(
                     for k, p in global_model.attack_head.named_parameters():
                         p.copy_(g_head_w[k] + new_head[k])
             
-            new_arrays = [p.detach().cpu().numpy() for p in global_model.parameters()]
+            new_arrays = [p.detach().cpu().numpy() for p in get_federated_parameters(global_model)]
             
             if mode == 'dc_fltrust':
                 flagged_indices = [i for i, excl in enumerate(exclusion_flags) if excl]
@@ -703,8 +462,6 @@ def run_experiment(
             for idx in range(num_clients):
                 print(f"  [{mode}] Client {idx:2d} [{roles[idx]:10s}] ch1={ch1_scores[idx]:.4f} ch2={ch2_scores[idx] if ch2_scores[idx] is not None else 0.0:.4f} -> {classifications[idx]}")
                 
-            if attack_ref_buffer is not None:
-                print(f"  [DC-FLTrust] Buffer size: {len(attack_ref_buffer._buffer)}")
                 
             print(f"\n  [{mode}] Per-Client Trust Scores:")
             for idx, trust in enumerate(trust_scores):
@@ -732,7 +489,7 @@ def run_experiment(
         # Update shared global model
         global_arrays = new_arrays
         with torch.no_grad():
-            for p, arr in zip(global_model.parameters(), global_arrays):
+            for p, arr in zip(get_federated_parameters(global_model), global_arrays):
                 p.copy_(torch.tensor(arr, dtype=torch.float32))
 
     # Final SHA-256 hash (tamper-evident audit trail)

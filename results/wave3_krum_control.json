@@ -1,0 +1,79 @@
+{
+ "rounds": 20,
+ "seeds": 3,
+ "routing_cut": 0.03357340767979622,
+ "ch1_threshold": 0.0173,
+ "adaptive_cosine": 0.6,
+ "runs": {
+  "krum_f1|none|0": {
+   "recall_1pct": 0.5892946473236619,
+   "auroc": 0.9879944065414633,
+   "attackers_excluded": null,
+   "honest_excluded": 0.4000000000000001,
+   "recall_1pct_std": 0.001429583808527793
+  },
+  "krum|none|0": {
+   "recall_1pct": 0.5908787727196931,
+   "auroc": 0.9886089257590291,
+   "attackers_excluded": null,
+   "honest_excluded": 0.4000000000000001,
+   "recall_1pct_std": 0.0017369240166749643
+  },
+  "krum_f1|sign_flip|1": {
+   "recall_1pct": 0.5867100216775054,
+   "auroc": 0.9882370079034128,
+   "attackers_excluded": 1.0,
+   "honest_excluded": 0.25,
+   "recall_1pct_std": 0.003282477853098153
+  },
+  "krum|sign_flip|1": {
+   "recall_1pct": 0.5861263965315991,
+   "auroc": 0.9881590114367383,
+   "attackers_excluded": 1.0,
+   "honest_excluded": 0.25,
+   "recall_1pct_std": 0.0026020487801112595
+  },
+  "krum_f1|scaled_flip|1": {
+   "recall_1pct": 0.5867100216775054,
+   "auroc": 0.9882370079034128,
+   "attackers_excluded": 1.0,
+   "honest_excluded": 0.25,
+   "recall_1pct_std": 0.003282477853098153
+  },
+  "krum|scaled_flip|1": {
+   "recall_1pct": 0.5861263965315991,
+   "auroc": 0.9881590114367383,
+   "attackers_excluded": 1.0,
+   "honest_excluded": 0.25,
+   "recall_1pct_std": 0.0026020487801112595
+  },
+  "krum_f1|poison|1": {
+   "recall_1pct": 0.5895447723861932,
+   "auroc": 0.9857145989344431,
+   "attackers_excluded": 1.0,
+   "honest_excluded": 0.25,
+   "recall_1pct_std": 0.0014295838085277737
+  },
+  "krum|poison|1": {
+   "recall_1pct": 0.5909621477405369,
+   "auroc": 0.9880836869076276,
+   "attackers_excluded": 1.0,
+   "honest_excluded": 0.25,
+   "recall_1pct_std": 0.002919316558281049
+  },
+  "krum_f1|adaptive@0.0|1": {
+   "recall_1pct": 0.5842921460730365,
+   "auroc": 0.9859122108458234,
+   "attackers_excluded": 0.8666666666666667,
+   "honest_excluded": 0.2833333333333334,
+   "recall_1pct_std": 0.0008169050334444355
+  },
+  "krum|adaptive@0.0|1": {
+   "recall_1pct": 0.5870435217608804,
+   "auroc": 0.9855187234522029,
+   "attackers_excluded": 0.8833333333333334,
+   "honest_excluded": 0.27916666666666673,
+   "recall_1pct_std": 0.0012753925746855428
+  }
+ }
+}

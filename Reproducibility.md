@@ -68,7 +68,7 @@ To reproduce the paper from scratch, execute the pipeline in this strict chronol
 
 2.  **Threshold Calibration**
     ```bash
-    python calibrate_thresholds.py --train-quick
+    python calibrate_thresholds.py
     ```
     *Analyzes the benign traffic manifold and saves dynamic UCL thresholds to `logs/calibration_results.json`.*
 
@@ -175,7 +175,7 @@ To ensure scientific validity, AURA-1 implements multiple layers of state consis
 | :--- | :--- | :--- |
 | **`FileNotFoundError: NF-UNSW-NB15-v3.csv`** | Dataset missing from project root. | Place the CSV inside the `dataset/` directory. |
 | **`AttributeError: 'tuple' object has no attribute 'size'`** | Interface drift in Autoencoder MIA script. | Pull the latest commit; `mia_attack.py` was repaired to unpack `(x_hat, z)` correctly. |
-| **`Sentinal Threshold WARNING`** | `calibrate_thresholds.py` was not run. | Run `python calibrate_thresholds.py --train-quick` before benchmarking. |
+| **`Sentinal Threshold WARNING`** | `calibrate_thresholds.py` was not run. | Run `python calibrate_thresholds.py` before benchmarking. |
 | **`KeyError: 'ch2_mse'`** | Using `benchmark_byzantine.py` before `train_explainer.py`. | Run `python scripts/train_explainer.py` to generate `attack_class_stats.json`. |
 | **`Opacus: ModuleNotFoundError`** | Privacy engine not installed. | Run `pip install opacus`. Ensure you are activating the correct `.venv`. |
 | **`RuntimeError: DataLoader worker ...`** | Windows multiprocess locking. | Ensure `$env:PYTHONIOENCODING="utf-8"` and `$env:PYTHONPATH="."` are set in PowerShell. |

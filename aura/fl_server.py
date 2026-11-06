@@ -93,6 +93,7 @@ logger = logging.getLogger(__name__)
 def krum_select(
     updates:       List[List[np.ndarray]],
     num_to_select: int = cfg.KRUM_NUM_TO_SELECT,
+    f:             Optional[int] = None,
 ) -> List[int]:
     """
     Krum Selection Algorithm (Blanchard et al., 2017).
@@ -104,15 +105,19 @@ def krum_select(
     2. Compute pairwise squared Euclidean distances: d(i,j) = ||w_i - w_j||²
     3. For each client i, compute the Krum score:
          s(i) = Σ_{j ∈ N_k(i)} d(i, j)
-       where N_k(i) = k nearest neighbours of i (k = n - num_to_select - 2)
+       where N_k(i) = k nearest neighbours of i, k = n - f - 2
     4. Select the num_to_select clients with the LOWEST Krum scores.
 
     Poisoned clients produce updates far from the cluster → high scores → dropped.
+    Krum's guarantee needs n > 2f + 2.
 
     Parameters
     ----------
     updates        : List of per-client parameters (each is a list of ndarrays)
     num_to_select  : How many clients to keep (KRUM_NUM_TO_SELECT in config)
+    f              : Number of attackers to tolerate. None keeps the earlier rule,
+                     k = n - num_to_select - 2, which confuses the number kept with f;
+                     every Krum result before this argument existed used it.
 
     Returns
     -------
@@ -128,8 +133,7 @@ def krum_select(
     for client_params in updates:
         flat.append(np.concatenate([p.flatten() for p in client_params]))
 
-    # k = n - num_to_select - 2  (guaranteed Byzantine tolerance formula)
-    k = max(1, n - num_to_select - 2)
+    k = max(1, n - (num_to_select if f is None else f) - 2)
 
     scores = []
     for i in range(n):
@@ -193,34 +197,33 @@ def _build_root_dataset(scaler, n_samples=5000):
         scaler: the SAME MinMaxScaler instance used for client data
         n_samples: number of flows to include (5000 recommended)
     """
+    from aura import dataset as ds
     from aura.split_manager import get_canonical_split
-    from aura.data_loader import CICIDSDataLoader
-    
-    loader = CICIDSDataLoader()
-    all_windows = list(loader.stream_graphs(scaler))
-    calib_windows, _, _, server_attack_windows = get_canonical_split(all_windows, test_fraction=0.20)
-    
-    # Extract benign flows from calibration windows only
-    all_flows = []
-    for graph, labels in calib_windows:
-        flows = graph['edge_attr']
-        benign_mask = labels == 0
-        if benign_mask.any():
-            all_flows.append(flows[benign_mask])
-        if sum(len(f) for f in all_flows) >= n_samples:
-            break
-    
-    if not all_flows:
-        raise RuntimeError(
-            "FATAL: Root dataset is empty. "
-            "Check that canonical training split contains benign flows."
-        )
-    
-    root_data = torch.cat(all_flows)[:n_samples]
-    print(f"[ROOT DATASET] Built from canonical training split: {len(root_data)} benign flows")
-    if scaler is not None:
-        print(f"[ROOT DATASET] Using shared scaler instance: {id(scaler)}")
+
+    # Root data comes from the server-root blocks of the canonical split, which
+    # are disjoint from (and de-duplicated against) every client's training data.
+    table = ds.load_flow_table()
+    split = ds.compute_split(table=table)
+    benign = split.benign_flows("root", table)
+    if len(benign) == 0:
+        raise RuntimeError("FATAL: Root dataset is empty — server-root split has no benign flows.")
+    rng = np.random.default_rng(cfg.SEED)
+    pick = np.sort(rng.choice(benign, size=min(n_samples, len(benign)), replace=False))
+    root_data = ds.flows_tensor(pick, scaler)
+
+    _, _, _, server_attack_windows = get_canonical_split(ds.WindowStore(scaler, table=table))
+    print(f"[ROOT DATASET] {len(root_data)} benign flows from the server-root split; "
+          f"{len(server_attack_windows)} attack-reserve windows")
     return root_data, server_attack_windows
+
+
+def _load_shared_scaler():
+    """
+    Return the preprocessor the pretrained bundle was trained with (saved by
+    train.py), so server root data and client data share its feature space.
+    """
+    from aura import dataset as ds
+    return ds.load_preprocessor()
 # ─────────────────────────────────────────────────────────────────────────────
 # FLTrust Aggregation (Upgrade 6 — active path in aggregate_fit; Krum is legacy fallback only)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -240,6 +243,27 @@ def _retrain_reference_head(head, z_tensor, epochs=3):
         loss.backward()
         opt.step()
     head.eval()
+
+def _delta_norm(delta: dict) -> torch.Tensor:
+    return torch.cat([v.flatten().float() for v in delta.values()]).norm()
+
+
+def _scale_to_root(deltas: list, root_delta: dict) -> list:
+    """
+    FLTrust magnitude normalisation: rescale each update to the root update's norm.
+    Cosine trust ignores magnitude, so without this one client can dominate the
+    average just by scaling its update up.
+    """
+    root_norm = _delta_norm(root_delta)
+    scaled = []
+    for delta in deltas:
+        norm = None if delta is None else _delta_norm(delta)
+        if norm is None or norm == 0:
+            scaled.append(delta)
+        else:
+            scaled.append({k: v * (root_norm / norm) for k, v in delta.items()})
+    return scaled
+
 
 def ae_only_fltrust_aggregate(
     client_ae_deltas: list,
@@ -271,17 +295,16 @@ def ae_only_fltrust_aggregate(
     
     # Normalize
     total = sum(trust_scores)
-    if total > 0:
-        normalized = [s / total for s in trust_scores]
-    else:
-        normalized = [1.0 / len(trust_scores)] * len(trust_scores)
-    
+    # All clients at zero trust: no update, as in FLTrust
+    normalized = [s / total if total > 0 else 0.0 for s in trust_scores]
+
     # Weighted aggregation
+    scaled_ae = _scale_to_root(client_ae_deltas, root_ae_delta)
     agg_ae = {
-        k: sum(w * d[k] for w, d in zip(normalized, client_ae_deltas))
-        for k in client_ae_deltas[0]
+        k: sum(w * d[k] for w, d in zip(normalized, scaled_ae))
+        for k in scaled_ae[0]
     }
-    
+
     return agg_ae, trust_scores
 
 
@@ -346,20 +369,19 @@ def joint_dual_fltrust_aggregate(
     
     # Normalize combined scores
     total = sum(combined_scores)
-    if total > 0:
-        normalized = [s / total for s in combined_scores]
-    else:
-        normalized = [1.0 / len(combined_scores)] * len(combined_scores)
-    
+    # All clients at zero trust: no update, as in FLTrust
+    normalized = [s / total if total > 0 else 0.0 for s in combined_scores]
+
     # Both channels aggregated with same combined weight
     # This is the flaw: corrupted head gradients enter aggregation
     # at the same weight as honest AE gradients
+    scaled_ae = _scale_to_root(client_ae_deltas, root_ae_delta)
     agg_ae = {
-        k: sum(w * d[k] for w, d in zip(normalized, client_ae_deltas))
-        for k in client_ae_deltas[0]
+        k: sum(w * d[k] for w, d in zip(normalized, scaled_ae))
+        for k in scaled_ae[0]
     }
-    
-    valid_heads = [(w, d) for w, d in zip(normalized, client_head_deltas)
+
+    valid_heads = [(w, d) for w, d in zip(normalized, _scale_to_root(client_head_deltas, root_head_delta))
                    if d is not None]
     if valid_heads:
         agg_head = {
@@ -383,17 +405,24 @@ def dc_fltrust_aggregate(
     attack_ref_buffer = None,
     current_round: int = 0,
     reference_attack_head = None,
-    ch1_threshold: float = 0.25
+    ch1_threshold: float = cfg.FLTRUST_CH1_THRESHOLD,
+    joint_exclusion: bool = False
 ) -> tuple:
     """
     Dual-channel FLTrust aggregation.
-    
+
     Channel 1: cosine similarity of AE delta vs root AE delta
     Channel 2: cosine similarity of AttackHead delta vs root head delta
                Only active after ch2_warmup_rounds per client
-    
-    Returns: (aggregated_ae_weights, aggregated_head_weights, 
-               ch1_scores, ch2_scores, classifications)
+
+    Each channel gates only its own model. An organisation with no attacks scores
+    low on channel 2, so letting that remove its AE update drops honest clients.
+    joint_exclusion=True restores the old rule (either channel removes both updates)
+    for reproducing earlier experiments.
+
+    Returns: (aggregated_ae_weights, aggregated_head_weights,
+               ch1_scores, ch2_scores, classifications, exclusion_flags)
+    exclusion_flags marks a client flagged on either channel.
     """
     
     def flatten(delta: dict) -> torch.Tensor:
@@ -432,6 +461,8 @@ def dc_fltrust_aggregate(
     ch2_raw_scores = []   # Signed cosine for ch2 (used in classification only)
     classifications = []
     exclusion_flags = []
+    ae_excluded = []
+    head_excluded = []
     warmup_flags = []
     under_attack_flags = []
 
@@ -442,48 +473,7 @@ def dc_fltrust_aggregate(
         client_flat = flatten(ae_delta)
         ch1 = relu_cosine(client_flat, root_ae_flat)
         
-        sim = signed_cosine(client_flat, root_ae_flat)
 
-        # ── Full instrumentation block ────────────────────────────────────────
-        _root_keys   = list(root_ae_delta.keys())
-        _client_keys = list(ae_delta.keys())
-        _keys_match  = _root_keys == _client_keys
-        _root_len    = sum(v.numel() for v in root_ae_delta.values())
-        _client_len  = sum(v.numel() for v in ae_delta.values())
-        _enc_params  = sum(v.numel() for k, v in ae_delta.items() if k.startswith('encoder'))
-        _dec_params  = sum(v.numel() for k, v in ae_delta.items() if k.startswith('decoder'))
-        _other       = sum(v.numel() for k, v in ae_delta.items()
-                           if not k.startswith('encoder') and not k.startswith('decoder'))
-        print(f"\n{'='*26}")
-        print(f"CLIENT {i}")
-        print(f"{'='*26}")
-        print(f"  Root  keys ({len(_root_keys)}):   {_root_keys}")
-        print(f"  Client keys ({len(_client_keys)}): {_client_keys}")
-        print(f"  Keys identical:        {_keys_match}")
-        print(f"  Root  flatten length:  {_root_len}")
-        print(f"  Client flatten length: {_client_len}")
-        print(f"  Root  norm:  {root_ae_flat.norm():.6f}")
-        print(f"  Client norm: {client_flat.norm():.6f}")
-        print(f"  Signed cosine:  {sim:.6f}")
-        print(f"  ReLU cosine:    {ch1:.6f}")
-        print(f"  Root dtype/device:   {root_ae_flat.dtype} / {root_ae_flat.device}")
-        print(f"  Client dtype/device: {client_flat.dtype} / {client_flat.device}")
-        print(f"  Param coverage -> encoder: {_enc_params}  decoder: {_dec_params}  other: {_other}")
-        print(f"  Root   first 10 vals: {root_ae_flat[:10].tolist()}")
-        print(f"  Client first 10 vals: {client_flat[:10].tolist()}")
-        # Save root and client[1] deltas once for offline cross-check
-        if i == 1:
-            import os, pickle
-            _save_path = os.path.join(os.path.dirname(__file__), '..', 'debug_deltas.pkl')
-            with open(_save_path, 'wb') as _f:
-                pickle.dump({'root_ae_delta': root_ae_delta,
-                             'client1_ae_delta': ae_delta}, _f)
-            print(f"  [SAVED] root_ae_delta + client[1] ae_delta -> debug_deltas.pkl")
-        # ── End instrumentation ───────────────────────────────────────────────
-        print(f"[DIAGNOSTIC] Client {i} gradient cosine with root: {sim:.4f}")
-        print(f"  Root grad norm: {root_ae_flat.norm():.4f}")
-        print(f"  Client grad norm: {client_flat.norm():.4f}")
-        print(f"  [CH1 CHECK] Client {i}: raw_signed={sim:.4f}  ch1_relu=max(0,raw)={ch1:.4f}")
 
         # Channel 2: gated by warmup
         if rounds >= ch2_warmup_rounds:
@@ -503,36 +493,30 @@ def dc_fltrust_aggregate(
         ch2_raw_scores.append(ch2_raw)
 
         # ── Step 1: Explicit Boolean Predicates ──────────────────────────────────
-        # Calibrated using Mean - 6*std of honest distribution (0.65 - 6*0.088 = 0.12)
-        ANTI_ALIGN_THRESHOLD = 0.12
-
-        if ch2_raw == 'WARMUP':
-            is_warmup = True
-            is_ch1_adversarial = False
-            is_ch2_adversarial = False
-            is_under_attack = False
-            should_exclude = False
-        else:
-            is_warmup = False
-            is_ch1_adversarial = (ch1 <= ch1_threshold)
-            is_ch2_adversarial = (ch2_raw is not None) and (ch2_raw < ANTI_ALIGN_THRESHOLD)
-            is_under_attack = (ch2_raw is not None) and (ch2_raw > 0.5) and (not is_ch1_adversarial)
-            # The canonical decision rule:
-            should_exclude = is_ch1_adversarial or is_ch2_adversarial
+        # Channel 1 is always checked; warmup only skips channel 2.
+        is_warmup = (ch2_raw == 'WARMUP')
+        is_ch1_adversarial = (ch1 <= ch1_threshold)
+        ch2_active = isinstance(ch2_raw, float)
+        is_ch2_adversarial = ch2_active and (ch2_raw < cfg.CH2_ANTI_ALIGN_THRESHOLD)
+        is_under_attack = ch2_active and (ch2_raw > cfg.CH2_UNDER_ATTACK_THRESHOLD) and (not is_ch1_adversarial)
+        # The canonical decision rule:
+        should_exclude = is_ch1_adversarial or is_ch2_adversarial
 
         exclusion_flags.append(should_exclude)
+        ae_excluded.append(should_exclude if joint_exclusion else is_ch1_adversarial)
+        head_excluded.append(should_exclude if joint_exclusion else is_ch2_adversarial)
         warmup_flags.append(is_warmup)
         under_attack_flags.append(is_under_attack)
 
         # ── Step 3: Pure Presentation Strings ────────────────────────────────────
         if is_warmup:
-            classification = 'WARMUP'
+            classification = 'WARMUP' if not is_ch1_adversarial else 'BYZANTINE'
         elif ch2_raw is None:
             classification = 'HEALTHY' if not is_ch1_adversarial else 'BYZANTINE'
         else:
-            if ch2_raw < ANTI_ALIGN_THRESHOLD:
+            if ch2_raw < cfg.CH2_ANTI_ALIGN_THRESHOLD:
                 classification = 'BYZANTINE_FAKE_ATTACK' if not is_ch1_adversarial else 'BYZANTINE'
-            elif ch2_raw > 0.5:
+            elif ch2_raw > cfg.CH2_UNDER_ATTACK_THRESHOLD:
                 classification = 'UNDER_ATTACK' if not is_ch1_adversarial else 'BYZANTINE_FAKE_ATTACK'
             else:
                 classification = 'HEALTHY' if not is_ch1_adversarial else 'BYZANTINE'
@@ -550,7 +534,7 @@ def dc_fltrust_aggregate(
     # Aggregate AE weights — exclude Byzantine clients from ch1
     ch1_weights = torch.tensor([
         s if not excl else 0.0
-        for s, excl in zip(ch1_scores, exclusion_flags)
+        for s, excl in zip(ch1_scores, ae_excluded)
     ])
     ch1_norm = ch1_weights.sum()
     if ch1_norm > 0:
@@ -586,18 +570,21 @@ def dc_fltrust_aggregate(
     ch2_weights = torch.tensor([
         (s if s is not None and isinstance(s, float) else 0.0)
         if not (excl or wrm) else 0.0
-        for s, excl, wrm in zip(ch2_scores, exclusion_flags, warmup_flags)
+        for s, excl, wrm in zip(ch2_scores, head_excluded, warmup_flags)
     ])
     ch2_norm = ch2_weights.sum()
     if ch2_norm > 0:
         ch2_weights = ch2_weights / ch2_norm
     
-    # Weighted aggregation
-    agg_ae = {k: sum(w * d[k] for w, d in zip(ch1_weights, client_ae_deltas))
-              for k in client_ae_deltas[0]}
-    
+    # Weighted aggregation of updates rescaled to the root norm (scores are computed
+    # above on the raw updates; cosine is unaffected by scale)
+    scaled_ae = _scale_to_root(client_ae_deltas, root_ae_delta)
+    scaled_head = _scale_to_root(client_head_deltas, root_head_delta)
+    agg_ae = {k: sum(w * d[k] for w, d in zip(ch1_weights, scaled_ae))
+              for k in scaled_ae[0]}
+
     active_head_updates = [
-        (w, d) for w, d, excl, wrm in zip(ch2_weights, client_head_deltas, exclusion_flags, warmup_flags)
+        (w, d) for w, d, excl, wrm in zip(ch2_weights, scaled_head, head_excluded, warmup_flags)
         if not (excl or wrm) and d is not None
     ]
     
@@ -783,9 +770,19 @@ class KrumFedAURA(FedAvg):
         num_rounds:            int   = cfg.FL_NUM_ROUNDS,
         round_timeout_sec:     int   = cfg.FL_ROUND_TIMEOUT_SEC,
         merkle_tree=None,      # Optionally inject MerkleTree logger
+        scaler=None,           # Shared MinMaxScaler; defaults to saved_models/scaler.joblib
     ):
+        # Global model reference (G0) — updated after each successful aggregation.
+        # Broadcast as the initial parameters so clients start from exactly the
+        # weights the server diffs their updates against.
+        from aura.fl_round import load_global_model
+        global_model = load_global_model()
+
         # Configure FedAvg base (we override aggregation but keep its scheduling)
         super().__init__(
+            initial_parameters    = ndarrays_to_parameters(
+                [p.detach().cpu().numpy() for p in get_federated_parameters(global_model)]
+            ),
             fraction_fit          = fraction_fit,
             fraction_evaluate     = fraction_evaluate,
             min_fit_clients       = min_fit_clients,
@@ -799,6 +796,11 @@ class KrumFedAURA(FedAvg):
             },
         )
         self.num_rounds        = num_rounds
+        if num_rounds < cfg.CH2_WARMUP_ROUNDS:
+            logger.warning(
+                f"[SERVER] {num_rounds} rounds never reaches CH2_WARMUP_ROUNDS="
+                f"{cfg.CH2_WARMUP_ROUNDS}: channel 2 stays off and the AttackHead is not federated."
+            )
         self.round_timeout_sec = round_timeout_sec
         self.audit_tree        = merkle_tree or __import__('aura.merkle_tree', fromlist=['']).MerkleTree()
         self._model_version    = 0
@@ -806,10 +808,14 @@ class KrumFedAURA(FedAvg):
 
         # FLTrust root dataset — generated once, reused every round.
         # This is the server's small trusted benign baseline.
-        self._root_data, self._server_attack_windows = _build_root_dataset()
-        # Global model reference — updated after each successful aggregation.
-        # FLTrust needs the current global state to compute per-client deltas.
-        self._global_model: AURAModelBundle = AURAModelBundle()
+        if scaler is None:
+            scaler = _load_shared_scaler()
+        self._root_data, self._server_attack_windows = _build_root_dataset(
+            scaler, n_samples=cfg.FLTRUST_ROOT_SAMPLES
+        )
+        from aura.root_gradient import attack_flows_from_windows
+        self._root_attack_flows = attack_flows_from_windows(self._server_attack_windows)
+        self._global_model: AURAModelBundle = global_model
 
         # Per-round trust score history (for dashboard + Upgrade 3 detection log)
         self._trust_history: List[dict] = []
@@ -883,97 +889,42 @@ class KrumFedAURA(FedAvg):
         # ── DC-FLTrust Aggregation ───────────────────────────────────────────
         print(f"\n{round_tag} Running DC-FLTrust aggregation on {n_received} updates …")
 
-        # Compute how many AE params the global model has
-        n_ae_params = len(list(self._global_model.autoencoder.parameters()))
+        from aura import fl_round
 
-        # Split each client's 16-tensor payload into AE (first 12) and Head (last 4)
-        global_ae_arrays = [p.detach().cpu().numpy()
-                            for p in self._global_model.autoencoder.parameters()]
-        global_head_arrays = [p.detach().cpu().numpy()
-                              for p in self._global_model.attack_head.parameters()]
+        global_ae = fl_round.snapshot(self._global_model.autoencoder)
+        global_head = fl_round.snapshot(self._global_model.attack_head)
+        ae_names, head_names = list(global_ae), list(global_head)
 
+        # Split each client's flat payload into AE and head deltas vs current global
         client_ae_deltas   = []
         client_head_deltas = []
         for arrays in client_updates:
-            ae_arrays   = arrays[:n_ae_params]
-            head_arrays = arrays[n_ae_params:]
-            # Compute deltas vs current global
-            ae_delta = {
-                f"layer_{i}": torch.tensor(c - g, dtype=torch.float32)
-                for i, (c, g) in enumerate(zip(ae_arrays, global_ae_arrays))
-            }
-            head_delta = {
-                f"layer_{i}": torch.tensor(c - g, dtype=torch.float32)
-                for i, (c, g) in enumerate(zip(head_arrays, global_head_arrays))
-            }
-            client_ae_deltas.append(ae_delta)
-            client_head_deltas.append(head_delta)
+            ae_arrays   = arrays[:len(ae_names)]
+            head_arrays = arrays[len(ae_names):]
+            client_ae_deltas.append({
+                k: torch.tensor(a, dtype=torch.float32) - global_ae[k]
+                for k, a in zip(ae_names, ae_arrays)
+            })
+            client_head_deltas.append({
+                k: torch.tensor(a, dtype=torch.float32) - global_head[k]
+                for k, a in zip(head_names, head_arrays)
+            })
 
-        # Compute server reference deltas (full-batch on root data)
-        server_model = AURAModelBundle()
-        with torch.no_grad():
-            for p, gp in zip(server_model.autoencoder.parameters(),
-                             self._global_model.autoencoder.parameters()):
-                p.copy_(gp)
-            for p, gp in zip(server_model.attack_head.parameters(),
-                             self._global_model.attack_head.parameters()):
-                p.copy_(gp)
-
-        ae_opt = torch.optim.Adam(server_model.autoencoder.parameters(),
-                                  lr=cfg.FLTRUST_SERVER_LR)
-        server_model.autoencoder.train()
-        ae_opt.zero_grad()
-        # Full-batch gradient — eliminates sampling noise at convergence
-        x_hat, _ = server_model.autoencoder(self._root_data)
-        loss = nn.functional.mse_loss(x_hat, self._root_data)
-        loss.backward()
-        ae_opt.step()
-        server_model.eval()
-
-        root_ae_delta = {
-            f"layer_{i}": (p.detach().cpu() - gp.detach().cpu()).float()
-            for i, (p, gp) in enumerate(zip(server_model.autoencoder.parameters(),
-                                            self._global_model.autoencoder.parameters()))
-        }
-        
-        # Compute root head delta using reserved attack flows
-        from aura.root_gradient import _build_root_head_reference
-        root_head_delta = _build_root_head_reference(
-            server_attack_windows=self._server_attack_windows,
-            ae=server_model.autoencoder,
-            global_head_weights={k: v.clone() for k, v in self._global_model.attack_head.state_dict().items()},
-            mse_threshold=getattr(cfg, 'CH2_MSE_SPLIT_THRESHOLD', cfg.MSE_THRESHOLD_HIGH),
-            server_lr=cfg.FLTRUST_SERVER_LR
+        root_ae_delta, root_head_delta = fl_round.root_reference(
+            global_ae, global_head, self._root_data, self._root_attack_flows
         )
 
-        client_round_counts = [server_round] * n_received
-
-        agg_ae_delta, agg_head_delta, ch1_scores, ch2_scores, classifications, exclusion_flags = dc_fltrust_aggregate(
-            client_ae_deltas=client_ae_deltas,
-            client_head_deltas = client_head_deltas,
-            root_ae_delta      = root_ae_delta,
-            root_head_delta    = root_head_delta,
-            client_round_counts = client_round_counts,
-            ch2_warmup_rounds  = cfg.CH2_WARMUP_ROUNDS,
-            current_round      = server_round,
+        agg_ae_delta, agg_head_delta, ch1_scores, ch2_scores, classifications, exclusion_flags = fl_round.aggregate(
+            client_ae_deltas, client_head_deltas, root_ae_delta, root_head_delta, server_round
         )
 
         # Apply deltas to global model to produce aggregated weight arrays
-        aggregated_ae = [
-            (gp.detach().cpu() + agg_ae_delta[f"layer_{i}"]).numpy().astype(np.float32)
-            for i, gp in enumerate(self._global_model.autoencoder.parameters())
-        ]
-        if agg_head_delta is not None:
-            aggregated_head = [
-                (gp.detach().cpu() + agg_head_delta[f"layer_{i}"]).numpy().astype(np.float32)
-                for i, gp in enumerate(self._global_model.attack_head.parameters())
-            ]
-        else:
-            # No head update this round — keep current global head weights
-            aggregated_head = global_head_arrays
+        new_ae = fl_round.apply_delta(global_ae, agg_ae_delta)
+        new_head = fl_round.apply_delta(global_head, agg_head_delta)
 
         # Recombine into a single flat list matching model_to_ndarrays layout
-        aggregated = aggregated_ae + aggregated_head
+        aggregated = [v.numpy().astype(np.float32)
+                      for v in list(new_ae.values()) + list(new_head.values())]
 
         # Map DC-FLTrust exclusion flags to flagged_indices for downstream logging
         flagged_indices = [
@@ -995,9 +946,8 @@ class KrumFedAURA(FedAvg):
             )
             if idx in flagged_indices:
                 logger.warning(
-                    f"{round_tag} [FLTrust] Client {idx} flagged — "
-                    f"trust score {trust:.4f} ≤ threshold {cfg.FLTRUST_MIN_TRUST_SCORE}. "
-                    f"Client's gradient direction opposes benign improvement."
+                    f"{round_tag} [FLTrust] Client {idx} flagged on at least one channel — "
+                    f"ch1 trust score {trust:.4f}, classified {classifications[idx]}."
                 )
 
         # Persist trust scores for Upgrade 3 detection log
@@ -1029,7 +979,8 @@ class KrumFedAURA(FedAvg):
             entry = AuditEntry(
                 timestamp=datetime.utcnow().isoformat(),
                 round_num=server_round,
-                client_id=str(cp.cid),
+                # cp is None in run_federation_simulation (no ClientProxy in-process)
+                client_id=str(cp.cid) if cp is not None else str(fr.metrics.get("client_id", idx)),
                 ae_update_norm=0.0,  # Computed in dc_fltrust normally
                 head_update_norm=None,
                 local_val_accuracy=float(fr.metrics.get("val_accuracy", 0.0)),
@@ -1207,23 +1158,21 @@ def run_federation_simulation(merkle_tree=None, n_rounds: int = None,
     else:
         attack_arg = -1
 
-    from aura.data_loader import CICIDSDataLoader
-    _shared_loader = CICIDSDataLoader()
-    _shared_scaler = _shared_loader.fit_scaler()
+    _shared_scaler = _load_shared_scaler()
 
     clients, attack_idx = create_mock_clients(
         n_clients     = len(active_orgs),
-        n_samples     = 300,
+        n_samples     = cfg.FL_SIM_CLIENT_FLOWS,
         org_ids       = active_orgs,
         attack_client = attack_arg,
         shared_scaler = _shared_scaler,
     )
     strategy = KrumFedAURA(merkle_tree=merkle_tree,
-                           num_rounds=n_rounds)
+                           num_rounds=n_rounds,
+                           scaler=_shared_scaler)
 
-    # Initialise with random global model
-    global_model = AURAModelBundle()
-    global_params = [p.detach().cpu().numpy() for p in get_federated_parameters(global_model)]
+    # Clients start from the strategy's G0, the model it diffs their updates against
+    global_params = [p.detach().cpu().numpy() for p in get_federated_parameters(strategy._global_model)]
 
     round_results = []
 

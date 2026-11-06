@@ -1,0 +1,456 @@
+{
+ "ranking": [
+  {
+   "feature": "num_pkts_up_to_128_bytes",
+   "auroc": 0.8548
+  },
+  {
+   "feature": "out_bytes",
+   "auroc": 0.8527
+  },
+  {
+   "feature": "server_tcp_flags_syn",
+   "auroc": 0.8167
+  },
+  {
+   "feature": "in_pkts",
+   "auroc": 0.8091
+  },
+  {
+   "feature": "out_pkts",
+   "auroc": 0.7995
+  },
+  {
+   "feature": "tcp_win_max_in",
+   "auroc": 0.7967
+  },
+  {
+   "feature": "tcp_win_max_out",
+   "auroc": 0.7911
+  },
+  {
+   "feature": "in_bytes",
+   "auroc": 0.7861
+  },
+  {
+   "feature": "min_ip_pkt_len",
+   "auroc": 0.7674
+  },
+  {
+   "feature": "dst_to_src_avg_throughput",
+   "auroc": 0.7444
+  },
+  {
+   "feature": "dst_to_src_second_bytes",
+   "auroc": 0.7282
+  },
+  {
+   "feature": "longest_flow_pkt",
+   "auroc": 0.7256
+  },
+  {
+   "feature": "max_ip_pkt_len",
+   "auroc": 0.7256
+  },
+  {
+   "feature": "server_tcp_flags_ack",
+   "auroc": 0.6995
+  },
+  {
+   "feature": "flow_duration_milliseconds",
+   "auroc": 0.6976
+  },
+  {
+   "feature": "l7_proto_7",
+   "auroc": 0.688
+  },
+  {
+   "feature": "l7_proto_0",
+   "auroc": 0.6864
+  },
+  {
+   "feature": "duration_in",
+   "auroc": 0.6833
+  },
+  {
+   "feature": "src_to_dst_second_bytes",
+   "auroc": 0.6785
+  },
+  {
+   "feature": "duration_out",
+   "auroc": 0.6765
+  },
+  {
+   "feature": "src_to_dst_iat_max",
+   "auroc": 0.6756
+  },
+  {
+   "feature": "client_tcp_flags_ack",
+   "auroc": 0.6741
+  },
+  {
+   "feature": "dst_to_src_iat_max",
+   "auroc": 0.6675
+  },
+  {
+   "feature": "src_to_dst_iat_avg",
+   "auroc": 0.6655
+  },
+  {
+   "feature": "dst_to_src_iat_avg",
+   "auroc": 0.66
+  },
+  {
+   "feature": "server_tcp_flags_psh",
+   "auroc": 0.6588
+  },
+  {
+   "feature": "dst_to_src_iat_stddev",
+   "auroc": 0.6562
+  },
+  {
+   "feature": "src_to_dst_iat_stddev",
+   "auroc": 0.6539
+  },
+  {
+   "feature": "server_tcp_flags_fin",
+   "auroc": 0.6526
+  },
+  {
+   "feature": "tcp_flags_ack",
+   "auroc": 0.6401
+  }
+ ],
+ "by_k": {
+  "0": {
+   "ae": {
+    "ae_auroc": 0.885,
+    "ae_recall_1pct": 0.0672,
+    "ae_recall_2pct": 0.1733
+   },
+   "head_labelled": {
+    "auroc": 0.9564,
+    "recall": 0.5099,
+    "union_recall": 0.5623,
+    "union_fpr": 0.0189,
+    "ae_recall_same_fpr": 0.16,
+    "ae_misses_caught": 0.532
+   },
+   "head_pseudo": {
+    "auroc": 0.8842,
+    "recall": 0.0,
+    "union_recall": 0.0672,
+    "union_fpr": 0.0098,
+    "ae_recall_same_fpr": 0.0668,
+    "ae_misses_caught": 0.0
+   },
+   "lightgbm": {
+    "auroc": 0.9863990904908438,
+    "recall_1pct": 0.8482108650678108
+   },
+   "lightgbm_unseen_class": {
+    "mean": 0.231,
+    "min": 0.0,
+    "per_class": {
+     "Backdoor": 0.0,
+     "ddos": 0.128,
+     "dos": 0.226,
+     "injection": 0.799,
+     "mitm": 0.0,
+     "password": 0.582,
+     "ransomware": 0.2,
+     "scanning": 0.001,
+     "xss": 0.147
+    }
+   },
+   "removed": []
+  },
+  "2": {
+   "ae": {
+    "ae_auroc": 0.8815,
+    "ae_recall_1pct": 0.1239,
+    "ae_recall_2pct": 0.1607
+   },
+   "head_labelled": {
+    "auroc": 0.9549,
+    "recall": 0.3849,
+    "union_recall": 0.4347,
+    "union_fpr": 0.0204,
+    "ae_recall_same_fpr": 0.1615,
+    "ae_misses_caught": 0.35
+   },
+   "head_pseudo": {
+    "auroc": 0.8586,
+    "recall": 0.0,
+    "union_recall": 0.1239,
+    "union_fpr": 0.01,
+    "ae_recall_same_fpr": 0.0666,
+    "ae_misses_caught": 0.0
+   },
+   "lightgbm": {
+    "auroc": 0.9864405370906624,
+    "recall_1pct": 0.848032079278727
+   },
+   "lightgbm_unseen_class": {
+    "mean": 0.223,
+    "min": 0.0,
+    "per_class": {
+     "Backdoor": 0.0,
+     "ddos": 0.095,
+     "dos": 0.183,
+     "injection": 0.794,
+     "mitm": 0.0,
+     "password": 0.587,
+     "ransomware": 0.2,
+     "scanning": 0.001,
+     "xss": 0.149
+    }
+   },
+   "removed": [
+    "num_pkts_up_to_128_bytes",
+    "out_bytes"
+   ]
+  },
+  "5": {
+   "ae": {
+    "ae_auroc": 0.884,
+    "ae_recall_1pct": 0.069,
+    "ae_recall_2pct": 0.1093
+   },
+   "head_labelled": {
+    "auroc": 0.9548,
+    "recall": 0.5476,
+    "union_recall": 0.6026,
+    "union_fpr": 0.0195,
+    "ae_recall_same_fpr": 0.1084,
+    "ae_misses_caught": 0.5727
+   },
+   "head_pseudo": {
+    "auroc": 0.8597,
+    "recall": 0.0221,
+    "union_recall": 0.0883,
+    "union_fpr": 0.0141,
+    "ae_recall_same_fpr": 0.0798,
+    "ae_misses_caught": 0.0209
+   },
+   "lightgbm": {
+    "auroc": 0.9864406256589483,
+    "recall_1pct": 0.8482108650678108
+   },
+   "lightgbm_unseen_class": {
+    "mean": 0.225,
+    "min": 0.0,
+    "per_class": {
+     "Backdoor": 0.0,
+     "ddos": 0.106,
+     "dos": 0.184,
+     "injection": 0.792,
+     "mitm": 0.0,
+     "password": 0.588,
+     "ransomware": 0.2,
+     "scanning": 0.001,
+     "xss": 0.15
+    }
+   },
+   "removed": [
+    "num_pkts_up_to_128_bytes",
+    "out_bytes",
+    "server_tcp_flags_syn",
+    "in_pkts",
+    "out_pkts"
+   ]
+  },
+  "10": {
+   "ae": {
+    "ae_auroc": 0.8317,
+    "ae_recall_1pct": 0.0681,
+    "ae_recall_2pct": 0.0918
+   },
+   "head_labelled": {
+    "auroc": 0.9384,
+    "recall": 0.4003,
+    "union_recall": 0.4575,
+    "union_fpr": 0.02,
+    "ae_recall_same_fpr": 0.0919,
+    "ae_misses_caught": 0.4183
+   },
+   "head_pseudo": {
+    "auroc": 0.8084,
+    "recall": 0.0031,
+    "union_recall": 0.0712,
+    "union_fpr": 0.0129,
+    "ae_recall_same_fpr": 0.0735,
+    "ae_misses_caught": 0.0032
+   },
+   "lightgbm": {
+    "auroc": 0.9837808973629688,
+    "recall_1pct": 0.8346486859244502
+   },
+   "lightgbm_unseen_class": {
+    "mean": 0.222,
+    "min": 0.0,
+    "per_class": {
+     "Backdoor": 0.288,
+     "ddos": 0.093,
+     "dos": 0.215,
+     "injection": 0.67,
+     "mitm": 0.0,
+     "password": 0.592,
+     "ransomware": 0.0,
+     "scanning": 0.001,
+     "xss": 0.14
+    }
+   },
+   "removed": [
+    "num_pkts_up_to_128_bytes",
+    "out_bytes",
+    "server_tcp_flags_syn",
+    "in_pkts",
+    "out_pkts",
+    "tcp_win_max_in",
+    "tcp_win_max_out",
+    "in_bytes",
+    "min_ip_pkt_len",
+    "dst_to_src_avg_throughput"
+   ]
+  },
+  "20": {
+   "ae": {
+    "ae_auroc": 0.8372,
+    "ae_recall_1pct": 0.0812,
+    "ae_recall_2pct": 0.1051
+   },
+   "head_labelled": {
+    "auroc": 0.9194,
+    "recall": 0.4162,
+    "union_recall": 0.4639,
+    "union_fpr": 0.0195,
+    "ae_recall_same_fpr": 0.1036,
+    "ae_misses_caught": 0.4166
+   },
+   "head_pseudo": {
+    "auroc": 0.8095,
+    "recall": 0.0716,
+    "union_recall": 0.151,
+    "union_fpr": 0.0134,
+    "ae_recall_same_fpr": 0.0886,
+    "ae_misses_caught": 0.0757
+   },
+   "lightgbm": {
+    "auroc": 0.9825809471497627,
+    "recall_1pct": 0.8299747145812582
+   },
+   "lightgbm_unseen_class": {
+    "mean": 0.201,
+    "min": 0.0,
+    "per_class": {
+     "Backdoor": 0.0,
+     "ddos": 0.085,
+     "dos": 0.204,
+     "injection": 0.74,
+     "mitm": 0.0,
+     "password": 0.616,
+     "ransomware": 0.0,
+     "scanning": 0.001,
+     "xss": 0.162
+    }
+   },
+   "removed": [
+    "num_pkts_up_to_128_bytes",
+    "out_bytes",
+    "server_tcp_flags_syn",
+    "in_pkts",
+    "out_pkts",
+    "tcp_win_max_in",
+    "tcp_win_max_out",
+    "in_bytes",
+    "min_ip_pkt_len",
+    "dst_to_src_avg_throughput",
+    "dst_to_src_second_bytes",
+    "longest_flow_pkt",
+    "max_ip_pkt_len",
+    "server_tcp_flags_ack",
+    "flow_duration_milliseconds",
+    "l7_proto_7",
+    "l7_proto_0",
+    "duration_in",
+    "src_to_dst_second_bytes",
+    "duration_out"
+   ]
+  },
+  "30": {
+   "ae": {
+    "ae_auroc": 0.8077,
+    "ae_recall_1pct": 0.0479,
+    "ae_recall_2pct": 0.0629
+   },
+   "head_labelled": {
+    "auroc": 0.8672,
+    "recall": 0.2159,
+    "union_recall": 0.2478,
+    "union_fpr": 0.0192,
+    "ae_recall_same_fpr": 0.0629,
+    "ae_misses_caught": 0.2101
+   },
+   "head_pseudo": {
+    "auroc": 0.7836,
+    "recall": 0.1524,
+    "union_recall": 0.1963,
+    "union_fpr": 0.0144,
+    "ae_recall_same_fpr": 0.0469,
+    "ae_misses_caught": 0.1562
+   },
+   "lightgbm": {
+    "auroc": 0.9816142711105148,
+    "recall_1pct": 0.8205246085868261
+   },
+   "lightgbm_unseen_class": {
+    "mean": 0.212,
+    "min": 0.0,
+    "per_class": {
+     "Backdoor": 0.0,
+     "ddos": 0.03,
+     "dos": 0.18,
+     "injection": 0.694,
+     "mitm": 0.0,
+     "password": 0.599,
+     "ransomware": 0.2,
+     "scanning": 0.001,
+     "xss": 0.201
+    }
+   },
+   "removed": [
+    "num_pkts_up_to_128_bytes",
+    "out_bytes",
+    "server_tcp_flags_syn",
+    "in_pkts",
+    "out_pkts",
+    "tcp_win_max_in",
+    "tcp_win_max_out",
+    "in_bytes",
+    "min_ip_pkt_len",
+    "dst_to_src_avg_throughput",
+    "dst_to_src_second_bytes",
+    "longest_flow_pkt",
+    "max_ip_pkt_len",
+    "server_tcp_flags_ack",
+    "flow_duration_milliseconds",
+    "l7_proto_7",
+    "l7_proto_0",
+    "duration_in",
+    "src_to_dst_second_bytes",
+    "duration_out",
+    "src_to_dst_iat_max",
+    "client_tcp_flags_ack",
+    "dst_to_src_iat_max",
+    "src_to_dst_iat_avg",
+    "dst_to_src_iat_avg",
+    "server_tcp_flags_psh",
+    "dst_to_src_iat_stddev",
+    "src_to_dst_iat_stddev",
+    "server_tcp_flags_fin",
+    "tcp_flags_ack"
+   ]
+  }
+ }
+}

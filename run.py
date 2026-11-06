@@ -163,7 +163,7 @@ def cmd_demo():
         print(f"  → Response: {r.action_taken}  Node: {r.node_id} ({r.node_label})")
 
     print("\nPhase 3: Federated Learning simulation …")
-    run_federation_simulation(blockchain_module=bc, n_rounds=2)
+    run_federation_simulation(n_rounds=2)
 
     print("\nPhase 4: Blockchain verification …")
     import hashlib

@@ -1,32 +1,40 @@
 """
 train.py — AURA Model Training Pipeline
 =========================================
-Trains the FlowAutoencoder on NF-UNSW-NB15-v3 benign data.
-Optionally also trains the STGNN with synthetic graph snapshots.
+Trains the FlowAutoencoder on benign NF-UNSW-NB15-v3 training flows and the
+STGNN on training graph windows, using the canonical data layer
+(aura/dataset.py). Also fits and saves the feature preprocessor and writes
+saved_models/manifest.json, which every downstream script checks.
 
 Usage:
-  python train.py                    # Train both models
-  python train.py --ae-only          # Train autoencoder only (faster)
-  python train.py --epochs 10        # Override epoch count
-  python train.py --quick            # Quick 5-epoch sanity check
+  python train.py                       # Train both models (cfg.TRAIN_DATA_FRACTION)
+  python train.py --ae-only             # Autoencoder only
+  python train.py --epochs 10           # Override epoch count
+  python train.py --train-fraction 1.0  # Use the full training pool
+  python train.py --quick               # 5% of the pool, 5 epochs (smoke run)
 """
 
 import argparse
 import logging
-import sys
-from pathlib import Path
+import random
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 import config as cfg
-from aura.data_loader import CICIDSDataLoader, CSV_FILES
+from aura import dataset as ds
 from aura.models import FlowAutoencoder, AuraSTGNN, AURAModelBundle
-from aura.split_manager import get_canonical_split
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def seed_everything(seed: int = cfg.SEED) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -38,19 +46,13 @@ def train_autoencoder(
     train_data: torch.Tensor,
     val_data:   torch.Tensor,
     epochs:     int = cfg.AE_EPOCHS,
-    device:     str = f"cuda" if torch.cuda.is_available() else "cpu",
-) -> FlowAutoencoder:
+    device:     str = "cuda" if torch.cuda.is_available() else "cpu",
+) -> tuple:
     """
-    Train the unsupervised autoencoder on benign flow features.
+    Train the unsupervised autoencoder on benign flow features with pure MSE
+    reconstruction loss. Keeps the best-validation checkpoint.
 
-    Strategy
-    --------
-    Phase 1 (first 2/3 of epochs): Pure MSE reconstruction on benign data.
-    Phase 2 (last 1/3 of epochs):  MSE + Contrastive loss using synthetic
-                                    negative samples (simulated attack features).
-
-    This two-phase approach first establishes a stable normal manifold, then
-    hardens the boundary by explicitly pushing attack-like latents away from it.
+    Returns (autoencoder, best_val_loss).
     """
     ae = ae.to(device)
     optimizer  = torch.optim.Adam(ae.parameters(), lr=cfg.AE_LEARNING_RATE)
@@ -58,7 +60,8 @@ def train_autoencoder(
 
     train_loader = DataLoader(
         TensorDataset(train_data.to(device)),
-        batch_size=cfg.AE_BATCH_SIZE, shuffle=True
+        batch_size=cfg.AE_BATCH_SIZE, shuffle=True,
+        generator=torch.Generator().manual_seed(cfg.SEED),
     )
     val_loader = DataLoader(
         TensorDataset(val_data.to(device)),
@@ -106,24 +109,24 @@ def train_autoencoder(
                   f"lr={scheduler.get_last_lr()[0]:.6f}")
 
     # Load best model
-    ae.load_state_dict(torch.load(cfg.MODELS_DIR / "autoencoder_best.pth"))
+    ae.load_state_dict(torch.load(cfg.MODELS_DIR / "autoencoder_best.pth", weights_only=True))
     print(f"\n[OK] Autoencoder training complete.  Best val loss: {best_val_loss:.5f}")
-    return ae
+    return ae, best_val_loss
 
 
 def train_stgnn(
     gnn:     AuraSTGNN,
-    graphs:  list,   # List of (graph_dict, labels) from stream_graphs()
+    graphs:  list,   # List of (graph, edge_labels) windows
     epochs:  int = cfg.GNN_EPOCHS,
     device:  str = "cpu",
 ) -> AuraSTGNN:
     """
-    Train the STGNN in a semi-supervised manner using available labels.
+    Train the STGNN with Binary Cross-Entropy on per-node anomaly scores.
 
-    Loss function: Binary Cross-Entropy on per-node anomaly scores.
-    Since node labels are approximated from edge labels (any node with an
-    incident labelled-attack edge is a 'suspicious' node), this is a
-    weakly supervised approach — appropriate for the hackathon timeline.
+    Node labels are approximated from edge labels (any node with an incident
+    attack edge is suspicious) — weak supervision. The loss covers only nodes
+    active in the window: inactive hosts have all-zero features and carry no
+    information.
     """
     gnn = gnn.to(device)
     optimizer = torch.optim.Adam(gnn.parameters(), lr=cfg.GNN_LEARNING_RATE)
@@ -141,6 +144,7 @@ def train_stgnn(
         for graph, edge_labels in graphs:
             x          = graph["x"].to(device)
             edge_index = graph["edge_index"].to(device)
+            active     = graph["active_nodes"].to(device)
 
             # Approximate node labels: node is suspicious if any incident edge is attack
             N = x.shape[0]
@@ -154,7 +158,7 @@ def train_stgnn(
 
             optimizer.zero_grad()
             scores, _ = gnn(x, edge_index)
-            loss = bce_loss(scores, node_labels)
+            loss = bce_loss(scores[active], node_labels[active])
             loss.backward()
             torch.nn.utils.clip_grad_norm_(gnn.parameters(), max_norm=1.0)
             optimizer.step()
@@ -176,104 +180,91 @@ def main():
     parser = argparse.ArgumentParser(description="AURA Model Training")
     parser.add_argument("--ae-only",  action="store_true", help="Train autoencoder only")
     parser.add_argument("--epochs",   type=int, default=None, help="Override epoch count")
-    parser.add_argument("--quick",    action="store_true",   help="5-epoch quick test")
+    parser.add_argument("--train-fraction", type=float, default=None,
+                        help=f"Portion of the training pool to use (default {cfg.TRAIN_DATA_FRACTION})")
+    parser.add_argument("--quick",    action="store_true", help="5%% of the pool, 5 epochs")
     args = parser.parse_args()
 
+    seed_everything()
     epochs = 5 if args.quick else (args.epochs or cfg.AE_EPOCHS)
+    train_fraction = 0.05 if args.quick else (args.train_fraction or cfg.TRAIN_DATA_FRACTION)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Training device: {device}")
 
-    # ── Step 1: Load and preprocess data ────────────────────────────────────
-    print("\n[Phase 1] Loading NF-UNSW-NB15-v3 data and fitting scaler …")
-    loader = CICIDSDataLoader(load_fraction=0.15 if args.quick else cfg.DATA_LOAD_FRACTION)
-    scaler = loader.fit_scaler()
+    # ── Step 1: Canonical split + preprocessor ───────────────────────────────
+    print(f"\n[Phase 1] Canonical split (train fraction {train_fraction}) and preprocessor …")
+    table = ds.load_flow_table()
+    split = ds.compute_split(train_fraction, table)
+    prep = ds.fit_preprocessor(split, table)
 
-    # ── Step 2: Collect ALL windows for canonical split ──────────────────────
-    print("[Phase 2] Streaming all windows and computing canonical split …")
-    all_windows = []
-    for graph, labels in loader.stream_graphs(scaler, csv_files=[CSV_FILES[0]]):
-        all_windows.append((graph, labels))
+    # ── Step 2: Benign-only AE training flows ────────────────────────────────
+    # De-duplicated benign TRAINING flows (label == 0 per flow, not per window),
+    # minus IsolationForest outliers — the poisoned-baseline defence.
+    benign = split.benign_flows("train", table)
+    inlier = prep.is_inlier(table.raw[benign], table.raw_columns)
+    ae_flows = benign[inlier]                     # time-ordered (flow indices are sorted)
+    n_val   = int(len(ae_flows) * cfg.TEST_SPLIT_FRACTION)
+    n_train = len(ae_flows) - n_val
+    train_tensor = ds.flows_tensor(ae_flows[:n_train], prep)
+    val_tensor   = ds.flows_tensor(ae_flows[n_train:], prep)
+    logger.info(f"AE flows: {len(benign):,} benign train flows, {int((~inlier).sum()):,} "
+                f"IsolationForest outliers removed → train {n_train:,} / val {n_val:,} "
+                f"(chronological), {cfg.FEATURE_DIM} features")
 
-    if not all_windows:
-        logger.error("No windows collected. Check CSV paths in config.py.")
-        sys.exit(1)
-
-    # Use the canonical split so train.py and benchmark_ablation.py see
-    # identical train/test partitions.  The split is saved to
-    # splits/canonical_split.npz and reloaded on every subsequent run.
-    _, train_windows, _, _ = get_canonical_split(all_windows, test_fraction=cfg.TEST_SPLIT_FRACTION)
-
-    # Extract edge-level benign flows from the canonical *train* windows only.
-    # Never include flows from the test windows in the AE training set.
-    benign_flows = [
-        graph["edge_attr"]
-        for graph, labels in train_windows
-        if (labels == 0).any()
-    ]
-
-    if not benign_flows:
-        logger.error("No benign data in train windows. Check CSV paths in config.py.")
-        sys.exit(1)
-
-    all_benign = torch.cat(benign_flows, dim=0)   # [N_total, F]
-    logger.info(f"Total benign flows collected (train windows only): {all_benign.shape[0]}")
-
-    # Extract mixed graphs (benign + attack) from train windows for the GNN.
-    # Built from train_windows only — test windows never touch training logic.
-    attack_graphs_for_gnn = []
-    for graph, labels in train_windows:
-        attack_graphs_for_gnn.append((graph, labels))
-        if len(attack_graphs_for_gnn) >= cfg.GNN_ATTACK_GRAPH_CAP:  # Cap from config
-            break
-
-    # Val split: chronological last TEST_SPLIT_FRACTION of the train-window benign flows
-    n_val   = int(len(all_benign) * cfg.TEST_SPLIT_FRACTION)
-    n_train = len(all_benign) - n_val
-    train_tensor = all_benign[:n_train]
-    val_tensor   = all_benign[n_train:]
-
-    logger.info(f"AE train flows: {n_train}  |  val flows: {n_val}")
     # ── Step 3: Train Autoencoder ────────────────────────────────────────────
     print("[Phase 3] Training FlowAutoencoder …")
-    ae = FlowAutoencoder()
-    ae = train_autoencoder(ae, train_tensor, val_tensor, epochs=epochs, device=device)
+    seed_everything()
+    ae, best_val_loss = train_autoencoder(FlowAutoencoder(), train_tensor, val_tensor,
+                                          epochs=epochs, device=device)
 
     # ── Step 4: Train STGNN (optional) ───────────────────────────────────────
-    if not args.ae_only and attack_graphs_for_gnn:
-        # Also stream attack data for GNN training
-        print("[Phase 4] Collecting attack graph windows for STGNN …")
-        for csv_file in CSV_FILES[1:4]:   # Attack-containing CSVs
-            for graph, labels in loader.stream_graphs(scaler, csv_files=[csv_file]):
-                attack_graphs_for_gnn.append((graph, labels))
-                if len(attack_graphs_for_gnn) >= cfg.GNN_ATTACK_GRAPH_CAP * 2:
-                    break
-
-        print(f"[Phase 4] Training AuraSTGNN on {len(attack_graphs_for_gnn)} graphs …")
-        gnn = AuraSTGNN()
-        gnn = train_stgnn(gnn, attack_graphs_for_gnn, epochs=min(epochs, cfg.GNN_EPOCHS), device=device)
+    gnn = AuraSTGNN()
+    n_gnn_graphs = 0
+    if not args.ae_only:
+        train_windows = ds.WindowStore(prep, split.windows["train"], table)
+        # Seed with the first windows, then top up with attack-containing ones.
+        graphs = [train_windows[i] for i in range(min(cfg.GNN_ATTACK_GRAPH_CAP, len(train_windows)))]
+        for i in range(len(graphs), len(train_windows)):
+            if len(graphs) >= cfg.GNN_ATTACK_GRAPH_CAP * 2:
+                break
+            item = train_windows[i]
+            if item[1].sum() > 0:
+                graphs.append(item)
+        # Materialise once — the lazy store rebuilds a window on every access.
+        graphs = [({k: g[k] for k in ("x", "edge_index", "active_nodes")}, lbl)
+                  for g, lbl in graphs]
+        n_gnn_graphs = len(graphs)
+        print(f"[Phase 4] Training AuraSTGNN on {n_gnn_graphs} train windows …")
+        seed_everything()
+        gnn = train_stgnn(gnn, graphs, epochs=min(epochs, cfg.GNN_EPOCHS), device=device)
     else:
-        logger.info("Skipping STGNN training (--ae-only or no attack graphs).")
-        gnn = AuraSTGNN()
+        logger.info("Skipping STGNN training (--ae-only).")
 
-    # ── Step 5: Save full bundle ──────────────────────────────────────────────
+    # ── Step 5: Save full bundle (G0) ────────────────────────────────────────
+    # The bundle includes a seeded, freshly initialised AttackHead so every
+    # federation run starts from the same complete G0.
+    seed_everything()
     bundle = AURAModelBundle()
     bundle.autoencoder.load_state_dict(ae.state_dict())
-    if not args.ae_only:
-        bundle.stgnn.load_state_dict(gnn.state_dict())
-
+    bundle.stgnn.load_state_dict(gnn.state_dict())
     bundle_path = cfg.MODELS_DIR / "aura_bundle.pth"
     torch.save(bundle.state_dict(), bundle_path)
     print(f"\n[OK] Full AURA bundle saved: {bundle_path}")
     print(f"  Total parameters: {bundle.total_params():,}")
 
-    # ── Step 6: Save scaler for inference ────────────────────────────────────
-    import joblib
-    scaler_path = cfg.MODELS_DIR / "scaler.joblib"
-    joblib.dump(scaler, scaler_path)
-    print(f"[OK] Scaler saved: {scaler_path}")
+    # ── Step 6: Manifest ─────────────────────────────────────────────────────
+    ds.write_manifest(prep, split, extra={
+        "training": {
+            "ae_epochs": epochs, "ae_best_val_mse": best_val_loss,
+            "ae_train_flows": n_train, "ae_val_flows": n_val,
+            "if_outliers_removed": int((~inlier).sum()),
+            "gnn_trained": not args.ae_only, "gnn_graphs": n_gnn_graphs,
+        },
+    })
+    print(f"[OK] Manifest written: {ds.MANIFEST_FILE}")
 
     print(f"\n{'='*58}")
-    print("  AURA Training Complete — Ready for inference and demo!")
+    print("  AURA Training Complete — next: python calibrate_thresholds.py")
     print(f"{'='*58}\n")
 
 

@@ -1,0 +1,819 @@
+{
+  "split_hash": "7648fbc56fe24d0da0bba6593a7f43ab30e33f2b2ffb2f6621ffe1e1d5e83f3b",
+  "train_data_fraction": 0.3,
+  "n_test_flows": 246537,
+  "args": {
+    "quick": false,
+    "seeds": 3,
+    "ae_epochs": 20,
+    "local_epochs": 2,
+    "head_epochs": 10,
+    "hide": 3,
+    "skip_ttl_on": false
+  },
+  "ttl_off": {
+    "feature_dim": 76,
+    "dropped": [],
+    "shortcuts": {
+      "max_ttl_rule_auroc": 0.9991,
+      "top_single_features_auroc": {
+        "min_ip_pkt_len": 0.9964,
+        "server_tcp_flags_psh": 0.9687,
+        "shortest_flow_pkt": 0.9488,
+        "dst_to_src_avg_throughput": 0.931,
+        "src_to_dst_second_bytes": 0.9307,
+        "out_bytes": 0.8823,
+        "out_pkts": 0.8815,
+        "retransmitted_out_pkts": 0.8775
+      }
+    },
+    "detectors": {
+      "isolation_forest": {
+        "n_test": 246537,
+        "n_attack": 21200,
+        "auroc": 0.916,
+        "pr_auc": 0.4112,
+        "recall@calibFPR1%": 0.0662,
+        "test_fpr": 0.0123,
+        "per_class_recall": {
+          "Analysis": 0.0,
+          "Backdoor": 0.063,
+          "DoS": 0.073,
+          "Exploits": 0.037,
+          "Fuzzers": 0.062,
+          "Generic": 0.258,
+          "Reconnaissance": 0.053,
+          "Shellcode": 0.22,
+          "Worms": 0.067
+        }
+      },
+      "lightgbm_supervised": {
+        "n_test": 246537,
+        "n_attack": 21200,
+        "auroc": 1.0,
+        "pr_auc": 0.9999,
+        "recall@calibFPR1%": 1.0,
+        "test_fpr": 0.0104,
+        "per_class_recall": {
+          "Analysis": 1.0,
+          "Backdoor": 1.0,
+          "DoS": 1.0,
+          "Exploits": 1.0,
+          "Fuzzers": 1.0,
+          "Generic": 1.0,
+          "Reconnaissance": 1.0,
+          "Shellcode": 1.0,
+          "Worms": 1.0
+        }
+      },
+      "ae_central": {
+        "auroc": {
+          "mean": 0.9904,
+          "std": 0.0009
+        },
+        "pr_auc": {
+          "mean": 0.8759,
+          "std": 0.0064
+        },
+        "recall@calibFPR1%": {
+          "mean": 0.7362,
+          "std": 0.0152
+        },
+        "test_fpr": {
+          "mean": 0.0114,
+          "std": 0.0007
+        },
+        "per_class_recall": {
+          "Analysis": 0.008,
+          "Backdoor": 0.804,
+          "DoS": 0.691,
+          "Exploits": 0.507,
+          "Fuzzers": 0.961,
+          "Generic": 0.685,
+          "Reconnaissance": 0.961,
+          "Shellcode": 0.665,
+          "Worms": 0.711
+        },
+        "n_seeds": 3
+      },
+      "ae_fedavg": {
+        "auroc": {
+          "mean": 0.9881,
+          "std": 0.0008
+        },
+        "pr_auc": {
+          "mean": 0.8549,
+          "std": 0.0049
+        },
+        "recall@calibFPR1%": {
+          "mean": 0.7082,
+          "std": 0.0302
+        },
+        "test_fpr": {
+          "mean": 0.0116,
+          "std": 0.0004
+        },
+        "per_class_recall": {
+          "Analysis": 0.008,
+          "Backdoor": 0.762,
+          "DoS": 0.663,
+          "Exploits": 0.497,
+          "Fuzzers": 0.943,
+          "Generic": 0.671,
+          "Reconnaissance": 0.846,
+          "Shellcode": 0.608,
+          "Worms": 0.922
+        },
+        "n_seeds": 3
+      },
+      "ae_local_per_org": {
+        "hospital": {
+          "auroc": {
+            "mean": 0.9873,
+            "std": 0.0011
+          },
+          "pr_auc": {
+            "mean": 0.7251,
+            "std": 0.0229
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.7439,
+            "std": 0.0302
+          },
+          "test_fpr": {
+            "mean": 0.0106,
+            "std": 0.0004
+          },
+          "per_class_recall": {
+            "Analysis": 0.0,
+            "Backdoor": 0.79,
+            "DoS": 0.591,
+            "Exploits": 0.543,
+            "Fuzzers": 0.969,
+            "Generic": 0.49,
+            "Reconnaissance": 0.747,
+            "Shellcode": 0.902,
+            "Worms": 1.0
+          },
+          "n_seeds": 3
+        },
+        "bank": {
+          "test_fpr": {
+            "mean": 0.0113,
+            "std": 0.0008
+          },
+          "per_class_recall": {},
+          "n_seeds": 3
+        },
+        "university": {
+          "auroc": {
+            "mean": 0.9895,
+            "std": 0.0021
+          },
+          "pr_auc": {
+            "mean": 0.8626,
+            "std": 0.0172
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.7537,
+            "std": 0.0179
+          },
+          "test_fpr": {
+            "mean": 0.0117,
+            "std": 0.0003
+          },
+          "per_class_recall": {
+            "Analysis": 1.0,
+            "Backdoor": 0.72,
+            "DoS": 0.731,
+            "Exploits": 0.587,
+            "Fuzzers": 0.942,
+            "Generic": 0.774,
+            "Reconnaissance": 0.838,
+            "Shellcode": 0.286,
+            "Worms": 0.381
+          },
+          "n_seeds": 3
+        },
+        "isp": {
+          "auroc": {
+            "mean": 0.9669,
+            "std": 0.0086
+          },
+          "pr_auc": {
+            "mean": 0.6869,
+            "std": 0.1004
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.2864,
+            "std": 0.2865
+          },
+          "test_fpr": {
+            "mean": 0.0123,
+            "std": 0.0006
+          },
+          "per_class_recall": {
+            "Backdoor": 0.274,
+            "DoS": 0.285,
+            "Exploits": 0.201,
+            "Fuzzers": 0.351,
+            "Generic": 0.44,
+            "Reconnaissance": 0.398,
+            "Shellcode": 0.491,
+            "Worms": 0.445
+          },
+          "n_seeds": 3
+        },
+        "retail": {
+          "auroc": {
+            "mean": 0.9648,
+            "std": 0.0033
+          },
+          "pr_auc": {
+            "mean": 0.8639,
+            "std": 0.0219
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.2008,
+            "std": 0.0739
+          },
+          "test_fpr": {
+            "mean": 0.0141,
+            "std": 0.0008
+          },
+          "per_class_recall": {
+            "Analysis": 0.0,
+            "Backdoor": 0.185,
+            "DoS": 0.313,
+            "Exploits": 0.13,
+            "Fuzzers": 0.189,
+            "Generic": 0.398,
+            "Reconnaissance": 0.304,
+            "Shellcode": 0.307,
+            "Worms": 0.0
+          },
+          "n_seeds": 3
+        }
+      }
+    }
+  },
+  "zero_day_loco": {
+    "Analysis": {
+      "n_test": 124,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Backdoor": {
+      "n_test": 1025,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "DoS": {
+      "n_test": 1261,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Exploits": {
+      "n_test": 8098,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Fuzzers": {
+      "n_test": 6465,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Generic": {
+      "n_test": 1280,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Reconnaissance": {
+      "n_test": 2567,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Shellcode": {
+      "n_test": 350,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Worms": {
+      "n_test": 30,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    }
+  },
+  "federation_holdout": {
+    "hidden_classes": {
+      "hospital": [
+        "Analysis",
+        "Generic",
+        "Reconnaissance"
+      ],
+      "university": [
+        "Analysis",
+        "Reconnaissance",
+        "Worms"
+      ],
+      "isp": [
+        "Exploits",
+        "Reconnaissance",
+        "Shellcode"
+      ],
+      "retail": [
+        "Backdoor",
+        "Fuzzers",
+        "Generic"
+      ]
+    },
+    "local": {
+      "hospital": {
+        "recall_hidden": 0.3743,
+        "recall_seen": 0.5845,
+        "test_fpr": 0.011,
+        "n_hidden": 358,
+        "n_seen": 2129
+      },
+      "university": {
+        "recall_hidden": 0.1268,
+        "recall_seen": 0.2292,
+        "test_fpr": 0.0126,
+        "n_hidden": 665,
+        "n_seen": 4784
+      },
+      "isp": {
+        "recall_hidden": 0.022,
+        "recall_seen": 0.0091,
+        "test_fpr": 0.0086,
+        "n_hidden": 1815,
+        "n_seen": 1174
+      },
+      "retail": {
+        "recall_hidden": 0.0044,
+        "recall_seen": 0.0139,
+        "test_fpr": 0.0102,
+        "n_hidden": 4365,
+        "n_seen": 5910
+      },
+      "mean_over_orgs": {
+        "recall_hidden": 0.1319,
+        "recall_seen": 0.2092,
+        "test_fpr": 0.0106
+      }
+    },
+    "fedavg": {
+      "hospital": {
+        "recall_hidden": 0.176,
+        "recall_seen": 0.4085,
+        "test_fpr": 0.0109,
+        "n_hidden": 358,
+        "n_seen": 2129
+      },
+      "university": {
+        "recall_hidden": 0.1333,
+        "recall_seen": 0.2344,
+        "test_fpr": 0.0113,
+        "n_hidden": 665,
+        "n_seen": 4784
+      },
+      "isp": {
+        "recall_hidden": 0.1115,
+        "recall_seen": 0.3393,
+        "test_fpr": 0.0109,
+        "n_hidden": 1815,
+        "n_seen": 1174
+      },
+      "retail": {
+        "recall_hidden": 0.3585,
+        "recall_seen": 0.1355,
+        "test_fpr": 0.01,
+        "n_hidden": 4365,
+        "n_seen": 5910
+      },
+      "mean_over_orgs": {
+        "recall_hidden": 0.1948,
+        "recall_seen": 0.2794,
+        "test_fpr": 0.0108
+      }
+    },
+    "central": {
+      "hospital": {
+        "recall_hidden": 0.3538,
+        "recall_seen": 0.4121,
+        "test_fpr": 0.0115,
+        "n_hidden": 358,
+        "n_seen": 2129
+      },
+      "university": {
+        "recall_hidden": 0.4296,
+        "recall_seen": 0.3034,
+        "test_fpr": 0.0122,
+        "n_hidden": 665,
+        "n_seen": 4784
+      },
+      "isp": {
+        "recall_hidden": 0.2202,
+        "recall_seen": 0.3697,
+        "test_fpr": 0.0119,
+        "n_hidden": 1815,
+        "n_seen": 1174
+      },
+      "retail": {
+        "recall_hidden": 0.3735,
+        "recall_seen": 0.2062,
+        "test_fpr": 0.0109,
+        "n_hidden": 4365,
+        "n_seen": 5910
+      },
+      "mean_over_orgs": {
+        "recall_hidden": 0.3443,
+        "recall_seen": 0.3228,
+        "test_fpr": 0.0116
+      }
+    }
+  },
+  "ttl_on": {
+    "feature_dim": 78,
+    "dropped": [],
+    "shortcuts": {
+      "max_ttl_rule_auroc": 0.9991,
+      "top_single_features_auroc": {
+        "min_ttl": 0.9991,
+        "max_ttl": 0.9991,
+        "min_ip_pkt_len": 0.9966,
+        "server_tcp_flags_psh": 0.9687,
+        "shortest_flow_pkt": 0.9488,
+        "dst_to_src_avg_throughput": 0.931,
+        "src_to_dst_second_bytes": 0.9307,
+        "out_bytes": 0.8823
+      }
+    },
+    "detectors": {
+      "isolation_forest": {
+        "n_test": 246537,
+        "n_attack": 21200,
+        "auroc": 0.9202,
+        "pr_auc": 0.4085,
+        "recall@calibFPR1%": 0.0711,
+        "test_fpr": 0.0134,
+        "per_class_recall": {
+          "Analysis": 0.0,
+          "Backdoor": 0.041,
+          "DoS": 0.113,
+          "Exploits": 0.038,
+          "Fuzzers": 0.052,
+          "Generic": 0.287,
+          "Reconnaissance": 0.09,
+          "Shellcode": 0.22,
+          "Worms": 0.067
+        }
+      },
+      "lightgbm_supervised": {
+        "n_test": 246537,
+        "n_attack": 21200,
+        "auroc": 1.0,
+        "pr_auc": 1.0,
+        "recall@calibFPR1%": 1.0,
+        "test_fpr": 0.0053,
+        "per_class_recall": {
+          "Analysis": 1.0,
+          "Backdoor": 1.0,
+          "DoS": 1.0,
+          "Exploits": 1.0,
+          "Fuzzers": 1.0,
+          "Generic": 1.0,
+          "Reconnaissance": 1.0,
+          "Shellcode": 1.0,
+          "Worms": 1.0
+        }
+      },
+      "ae_central": {
+        "auroc": {
+          "mean": 0.9937,
+          "std": 0.0007
+        },
+        "pr_auc": {
+          "mean": 0.9025,
+          "std": 0.0183
+        },
+        "recall@calibFPR1%": {
+          "mean": 0.7854,
+          "std": 0.0067
+        },
+        "test_fpr": {
+          "mean": 0.0109,
+          "std": 0.0003
+        },
+        "per_class_recall": {
+          "Analysis": 0.008,
+          "Backdoor": 0.85,
+          "DoS": 0.736,
+          "Exploits": 0.558,
+          "Fuzzers": 1.0,
+          "Generic": 0.768,
+          "Reconnaissance": 0.975,
+          "Shellcode": 0.997,
+          "Worms": 1.0
+        },
+        "n_seeds": 3
+      },
+      "ae_fedavg": {
+        "auroc": {
+          "mean": 0.9945,
+          "std": 0.001
+        },
+        "pr_auc": {
+          "mean": 0.921,
+          "std": 0.0119
+        },
+        "recall@calibFPR1%": {
+          "mean": 0.8346,
+          "std": 0.0361
+        },
+        "test_fpr": {
+          "mean": 0.0121,
+          "std": 0.0006
+        },
+        "per_class_recall": {
+          "Analysis": 0.03,
+          "Backdoor": 0.906,
+          "DoS": 0.768,
+          "Exploits": 0.673,
+          "Fuzzers": 1.0,
+          "Generic": 0.775,
+          "Reconnaissance": 0.975,
+          "Shellcode": 0.999,
+          "Worms": 1.0
+        },
+        "n_seeds": 3
+      },
+      "ae_local_per_org": {
+        "hospital": {
+          "auroc": {
+            "mean": 0.9936,
+            "std": 0.0008
+          },
+          "pr_auc": {
+            "mean": 0.8452,
+            "std": 0.0229
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.8247,
+            "std": 0.0106
+          },
+          "test_fpr": {
+            "mean": 0.0102,
+            "std": 0.0007
+          },
+          "per_class_recall": {
+            "Analysis": 0.0,
+            "Backdoor": 0.934,
+            "DoS": 0.599,
+            "Exploits": 0.645,
+            "Fuzzers": 1.0,
+            "Generic": 0.563,
+            "Reconnaissance": 1.0,
+            "Shellcode": 1.0,
+            "Worms": 1.0
+          },
+          "n_seeds": 3
+        },
+        "bank": {
+          "test_fpr": {
+            "mean": 0.0108,
+            "std": 0.0006
+          },
+          "per_class_recall": {},
+          "n_seeds": 3
+        },
+        "university": {
+          "auroc": {
+            "mean": 0.9939,
+            "std": 0.0024
+          },
+          "pr_auc": {
+            "mean": 0.9139,
+            "std": 0.018
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.8525,
+            "std": 0.0106
+          },
+          "test_fpr": {
+            "mean": 0.0114,
+            "std": 0.0002
+          },
+          "per_class_recall": {
+            "Analysis": 1.0,
+            "Backdoor": 0.83,
+            "DoS": 0.849,
+            "Exploits": 0.679,
+            "Fuzzers": 1.0,
+            "Generic": 0.88,
+            "Reconnaissance": 0.997,
+            "Shellcode": 1.0,
+            "Worms": 1.0
+          },
+          "n_seeds": 3
+        },
+        "isp": {
+          "auroc": {
+            "mean": 0.968,
+            "std": 0.0016
+          },
+          "pr_auc": {
+            "mean": 0.6734,
+            "std": 0.0187
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.1192,
+            "std": 0.016
+          },
+          "test_fpr": {
+            "mean": 0.0124,
+            "std": 0.0001
+          },
+          "per_class_recall": {
+            "Backdoor": 0.087,
+            "DoS": 0.169,
+            "Exploits": 0.085,
+            "Fuzzers": 0.118,
+            "Generic": 0.31,
+            "Reconnaissance": 0.123,
+            "Shellcode": 0.255,
+            "Worms": 0.167
+          },
+          "n_seeds": 3
+        },
+        "retail": {
+          "auroc": {
+            "mean": 0.9702,
+            "std": 0.0014
+          },
+          "pr_auc": {
+            "mean": 0.8803,
+            "std": 0.0086
+          },
+          "recall@calibFPR1%": {
+            "mean": 0.1995,
+            "std": 0.0323
+          },
+          "test_fpr": {
+            "mean": 0.0138,
+            "std": 0.0005
+          },
+          "per_class_recall": {
+            "Analysis": 0.0,
+            "Backdoor": 0.226,
+            "DoS": 0.303,
+            "Exploits": 0.124,
+            "Fuzzers": 0.182,
+            "Generic": 0.395,
+            "Reconnaissance": 0.31,
+            "Shellcode": 0.309,
+            "Worms": 0.0
+          },
+          "n_seeds": 3
+        }
+      }
+    }
+  },
+  "shortcut_ablated": {
+    "feature_dim": 74,
+    "dropped": [
+      "MIN_IP_PKT_LEN",
+      "SHORTEST_FLOW_PKT"
+    ],
+    "shortcuts": {
+      "max_ttl_rule_auroc": 0.9991,
+      "top_single_features_auroc": {
+        "server_tcp_flags_psh": 0.9687,
+        "dst_to_src_avg_throughput": 0.931,
+        "src_to_dst_second_bytes": 0.9307,
+        "out_bytes": 0.8823,
+        "out_pkts": 0.8815,
+        "retransmitted_out_pkts": 0.8775,
+        "retransmitted_out_bytes": 0.8712,
+        "num_pkts_up_to_128_bytes": 0.8682
+      }
+    },
+    "detectors": {
+      "isolation_forest": {
+        "n_test": 246537,
+        "n_attack": 21200,
+        "auroc": 0.9084,
+        "pr_auc": 0.3859,
+        "recall@calibFPR1%": 0.0761,
+        "test_fpr": 0.0133,
+        "per_class_recall": {
+          "Analysis": 0.0,
+          "Backdoor": 0.061,
+          "DoS": 0.115,
+          "Exploits": 0.04,
+          "Fuzzers": 0.061,
+          "Generic": 0.291,
+          "Reconnaissance": 0.092,
+          "Shellcode": 0.22,
+          "Worms": 0.067
+        }
+      },
+      "lightgbm_supervised": {
+        "n_test": 246537,
+        "n_attack": 21200,
+        "auroc": 1.0,
+        "pr_auc": 0.9999,
+        "recall@calibFPR1%": 1.0,
+        "test_fpr": 0.0118,
+        "per_class_recall": {
+          "Analysis": 1.0,
+          "Backdoor": 1.0,
+          "DoS": 1.0,
+          "Exploits": 1.0,
+          "Fuzzers": 1.0,
+          "Generic": 1.0,
+          "Reconnaissance": 1.0,
+          "Shellcode": 1.0,
+          "Worms": 1.0
+        }
+      },
+      "ae_central": {
+        "auroc": {
+          "mean": 0.9813,
+          "std": 0.0006
+        },
+        "pr_auc": {
+          "mean": 0.7843,
+          "std": 0.014
+        },
+        "recall@calibFPR1%": {
+          "mean": 0.5758,
+          "std": 0.0257
+        },
+        "test_fpr": {
+          "mean": 0.0116,
+          "std": 0.0005
+        },
+        "per_class_recall": {
+          "Analysis": 0.003,
+          "Backdoor": 0.621,
+          "DoS": 0.538,
+          "Exploits": 0.314,
+          "Fuzzers": 0.844,
+          "Generic": 0.49,
+          "Reconnaissance": 0.808,
+          "Shellcode": 0.534,
+          "Worms": 0.067
+        },
+        "n_seeds": 3
+      }
+    }
+  },
+  "zero_day_loco_ablated": {
+    "Analysis": {
+      "n_test": 124,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Backdoor": {
+      "n_test": 1025,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "DoS": {
+      "n_test": 1261,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Exploits": {
+      "n_test": 8098,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Fuzzers": {
+      "n_test": 6465,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Generic": {
+      "n_test": 1280,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Reconnaissance": {
+      "n_test": 2567,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Shellcode": {
+      "n_test": 350,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    },
+    "Worms": {
+      "n_test": 30,
+      "recall_unseen@calibFPR1%": 1.0,
+      "auroc_unseen_vs_benign": 1.0
+    }
+  }
+}

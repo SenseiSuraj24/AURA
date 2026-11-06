@@ -1,20 +1,26 @@
-torch>=2.0.0
-torchvision
-numpy>=1.24.0
-pandas>=1.5.0
-scikit-learn>=1.2.0
-networkx>=3.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-streamlit>=1.28.0
-plotly>=5.14.0
-flwr>=1.5.0
-web3>=6.0.0
-joblib>=1.2.0
-tqdm>=4.65.0
-PyPDF2>=3.0.0
-pyyaml>=6.0.0
-flask>=3.0.0
-kagglehub>=0.2.0
+# Pinned to the reference environment (Python 3.12.10). Models and the feature
+# preprocessor are pickled; loading them under different library versions is
+# not guaranteed to reproduce results.
+torch==2.12.1
+torchvision==0.27.1
+numpy==2.5.0
+pandas==3.0.3
+scikit-learn==1.9.0
+networkx==3.6.1
+matplotlib==3.11.0
+seaborn==0.13.2
+streamlit==1.58.0
+plotly==6.8.0
+flwr==1.31.0
+web3==7.16.0
+joblib==1.5.3
+tqdm==4.68.3
+PyPDF2==3.0.1
+pyyaml==6.0.3
+flask==3.1.3
+kagglehub==1.0.2
+lightgbm==4.6.0
+# Not installed in the reference environment yet; without it every DP code
+# path silently trains WITHOUT differential privacy. To be pinned (and made a
+# hard requirement for DP runs) once verified against torch 2.12.
 opacus>=1.4.0
-lightgbm>=4.0.0

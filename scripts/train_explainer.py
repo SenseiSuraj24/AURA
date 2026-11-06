@@ -62,42 +62,19 @@ def load_labelled_data(
     y_labels : np.ndarray [N]     — string labels (e.g. 'Benign', 'DoS', 'Exploits')
     feature_cols : list[str]      — ordered feature column names
     """
-    from aura.data_loader import CICIDSDataLoader, DATASET_PATH
+    # Training flows only: the canonical, de-duplicated TRAIN set (never test,
+    # calibration or server-root flows). `fraction` is kept for old call sites;
+    # the training portion is set by cfg.TRAIN_DATA_FRACTION / the manifest.
+    import json
+    from aura import dataset as ds
 
-    loader = CICIDSDataLoader(load_fraction=fraction)
-    scaler = loader.fit_scaler()
-
-    # Re-load the full CSV (benign + attack) using the loader's internal method
-    # so feature column discovery and cleaning are consistent.
-    df = loader._load_csv(str(DATASET_PATH))
-    feature_cols = loader._feature_cols
-
-    # ── Extract labels ───────────────────────────────────────────────────────
-    label_col  = "Label"  if "Label"  in df.columns else cfg.LABEL_COL.strip()
-    attack_col = "Attack" if "Attack" in df.columns else None
-
-    binary_labels = df[label_col].values
-    if attack_col is not None:
-        string_labels = df[attack_col].astype(str).str.strip().values
-    else:
-        # Fallback: derive binary labels only
-        string_labels = np.where(
-            pd.api.types.is_numeric_dtype(df[label_col])
-            and (df[label_col].values == 0),
-            "Benign", "Unknown"
-        )
-        logger.warning("'Attack' column not found — using binary labels only.")
-
-    # Fix benign rows: some datasets label benign Attack column as '' or 'NaN'
-    is_benign = (binary_labels == 0) if pd.api.types.is_numeric_dtype(
-        df[label_col]
-    ) else (df[label_col].str.strip().str.upper() == "BENIGN").values
-
-    string_labels[is_benign] = "Benign"
-
-    # ── Scale features ───────────────────────────────────────────────────────
-    X = df[feature_cols].values.astype(np.float32)
-    X_scaled = scaler.transform(X).clip(0, 1)
+    ds.check_manifest()
+    table = ds.load_flow_table()
+    split = ds.compute_split(json.loads(ds.MANIFEST_FILE.read_text())["train_data_fraction"], table)
+    flows = split.flows["train"]
+    string_labels = np.asarray(table.class_names, dtype=object)[np.asarray(table.attack_class[flows])]
+    X_scaled = ds.flows_tensor(flows).numpy()
+    feature_cols = list(cfg.FEATURE_NAMES)
 
     logger.info(
         f"Loaded {len(X_scaled)} rows, {len(feature_cols)} features.  "

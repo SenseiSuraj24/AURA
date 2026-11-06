@@ -39,6 +39,9 @@ Desktop.ini
 #dataset
 dataset/
 
+# Derived data cache (aura/dataset.py: sorted flow table, feature matrices)
+cache/
+
 # React frontend
 frontend/node_modules/
 frontend/dist/
@@ -60,3 +63,7 @@ saved_models/
 pdf_text.txt
 Final_AURA_Implementation_Changes.pdf
 scratch/
+
+# runtime outputs of a federation round
+debug_deltas.pkl
+audit_trail/

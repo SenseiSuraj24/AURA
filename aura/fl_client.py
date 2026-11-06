@@ -495,8 +495,9 @@ class AURAFlowerClient(fl.client.Client):
             ae, head, self.train_data,
             ae_optimizer, head_optimizer,
             mse_threshold=mse_split,
-            head_epochs=3,
-            privacy_engine=privacy_engine
+            head_epochs=cfg.FL_HEAD_EPOCHS,
+            privacy_engine=privacy_engine,
+            local_epochs=self.local_epochs
         )
         
         assert n_benign > 0 or n_high_mse > 0, "FATAL: No flows processed in two-pass training"
@@ -614,7 +615,7 @@ def create_mock_clients(
 def start_client(
     client_id:      str,
     server_address: str = cfg.FL_SERVER_ADDRESS,
-    n_samples:      int = 500,
+    n_samples:      int = cfg.FL_SIM_CLIENT_FLOWS,
     is_byzantine:   bool = False,
 ) -> None:
     """
@@ -702,7 +703,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AURA FL Client (networked mode)")
     parser.add_argument("--client-id",  required=True,  help="e.g. org_hospital_1")
     parser.add_argument("--server",     default=cfg.FL_SERVER_ADDRESS, help="host:port")
-    parser.add_argument("--samples",    type=int, default=500)
+    parser.add_argument("--samples",    type=int, default=cfg.FL_SIM_CLIENT_FLOWS)
     parser.add_argument("--byzantine",  action="store_true", help="Adversarial client")
     parser.add_argument("--network-sim",default="",   help="Simulated LAN CIDR (display only)")
     parser.add_argument("--simulate-mitm", action="store_true",

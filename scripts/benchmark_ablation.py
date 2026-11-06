@@ -121,6 +121,17 @@ def derive_node_labels(edge_labels: torch.Tensor, edge_index: torch.Tensor,
     return node_labels
 
 
+def active_node_index(graph) -> torch.Tensor:
+    """
+    Nodes with at least one flow in this window. Only these are scored:
+    inactive hosts have all-zero features and label 0, so counting them adds
+    automatic true negatives (about half of all node slots) and deflates FPR.
+    """
+    if "active_nodes" in graph:
+        return graph["active_nodes"]
+    return torch.unique(graph["edge_index"].flatten())
+
+
 def compute_ae_node_residual(
     autoencoder: FlowAutoencoder,
     edge_attr: torch.Tensor,
@@ -176,7 +187,9 @@ def calibrate_ae_threshold(
             autoencoder, edge_attr, edge_index, num_nodes, device
         )
         node_labels = derive_node_labels(labels, graph["edge_index"], num_nodes, device)
-        benign_mask = node_labels == 0
+        active = torch.zeros(num_nodes, dtype=torch.bool, device=device)
+        active[active_node_index(graph).to(device)] = True
+        benign_mask = (node_labels == 0) & active
         if benign_mask.sum() > 0:
             all_residuals.append(node_res[benign_mask].cpu().numpy())
 
@@ -213,8 +226,9 @@ def calibrate_gnn_platt(stgnn: AuraSTGNN, calibration_windows: list, device: tor
         with torch.no_grad():
             scores, _ = stgnn(x, edge_index)
         
-        all_scores.append(scores.cpu().numpy())
-        all_labels.append(node_labels.cpu().numpy())
+        act = active_node_index(graph)
+        all_scores.append(scores[act].cpu().numpy())
+        all_labels.append(node_labels[act].cpu().numpy())
     
     X = np.concatenate(all_scores).reshape(-1, 1)
     y = np.concatenate(all_labels)
@@ -368,24 +382,10 @@ def collect_test_windows(
     applies a stratified chronological 80/20 split and persists the indices to
     splits/canonical_split.npz so every script uses the identical test set.
     """
-    logger.info("Streaming all graph windows to isolate the test split …")
-
-    all_windows = []
-    for graph, labels in loader.stream_graphs(scaler):
-        graph_copy = {
-            "x": graph["x"].clone(),
-            "edge_index": graph["edge_index"].clone(),
-            "edge_attr": graph["edge_attr"].clone(),
-            "window_id": graph["window_id"],
-        }
-        all_windows.append((graph_copy, labels.clone()))
-
+    # Lazy window store over the whole time-sorted dataset; windows are built
+    # on access, so selecting the test split never materialises all of them.
+    all_windows = loader.stream_graphs(scaler)
     total = len(all_windows)
-    if total == 0:
-        raise RuntimeError(
-            "No graph windows produced. Check that the dataset CSV exists at "
-            f"{cfg.CSV_DIR} and DATA_LOAD_FRACTION ({cfg.DATA_LOAD_FRACTION}) is sufficient."
-        )
 
     calibration_windows, train_windows, test_windows, _ = get_canonical_split(
         all_windows, test_fraction=test_fraction
@@ -424,9 +424,10 @@ def run_mode_a(ae: FlowAutoencoder, test_windows: list, threshold: float,
         node_residual = compute_ae_node_residual(ae, edge_attr, edge_index, num_nodes, device)
         y_pred = (node_residual > threshold).long()
 
-        all_y_true.append(node_labels.cpu().numpy())
-        all_y_pred.append(y_pred.cpu().numpy())
-        all_y_score.append(node_residual.cpu().numpy())
+        act = active_node_index(graph)
+        all_y_true.append(node_labels[act].cpu().numpy())
+        all_y_pred.append(y_pred[act].cpu().numpy())
+        all_y_score.append(node_residual[act].cpu().numpy())
 
     return (np.concatenate(all_y_true), np.concatenate(all_y_pred),
             np.concatenate(all_y_score))
@@ -452,9 +453,10 @@ def run_mode_b(stgnn: AuraSTGNN, platt_scaler, test_windows: list, device: torch
 
         y_pred = (calibrated_tensor > gnn_threshold).long()
 
-        all_y_true.append(node_labels.cpu().numpy())
-        all_y_pred.append(y_pred.cpu().numpy())
-        all_y_score.append(calibrated_probs)
+        act = active_node_index(graph)
+        all_y_true.append(node_labels[act].cpu().numpy())
+        all_y_pred.append(y_pred[act].cpu().numpy())
+        all_y_score.append(calibrated_probs[act.cpu().numpy()])
 
     return (np.concatenate(all_y_true), np.concatenate(all_y_pred),
             np.concatenate(all_y_score))
@@ -502,9 +504,10 @@ def run_mode_c(ae: FlowAutoencoder, stgnn: AuraSTGNN, platt_scaler, test_windows
             y_pred[ae_flagged] = gnn_decision
             y_score[ae_flagged] = calibrated_tensor
 
-        all_y_true.append(node_labels.cpu().numpy())
-        all_y_pred.append(y_pred.cpu().numpy())
-        all_y_score.append(y_score.cpu().numpy())
+        act = active_node_index(graph)
+        all_y_true.append(node_labels[act].cpu().numpy())
+        all_y_pred.append(y_pred[act].cpu().numpy())
+        all_y_score.append(y_score[act].cpu().numpy())
 
     return (np.concatenate(all_y_true), np.concatenate(all_y_pred),
             np.concatenate(all_y_score))
@@ -548,7 +551,9 @@ def run_mode_d(ae: FlowAutoencoder, stgnn: AuraSTGNN, platt_scaler, test_windows
         residual_np = node_residual.detach().cpu().numpy()
 
         ema_flagged = torch.zeros(num_nodes, dtype=torch.bool, device=device)
-        for node_id in range(num_nodes):
+        # Silent nodes have no reading this window; feeding them 0 would fold
+        # inactivity into the per-node benign baseline.
+        for node_id in active_node_index(graph).tolist():
             if tracker.update_and_check(node_id, float(residual_np[node_id])):
                 ema_flagged[node_id] = True
 
@@ -567,9 +572,10 @@ def run_mode_d(ae: FlowAutoencoder, stgnn: AuraSTGNN, platt_scaler, test_windows
             y_pred[ema_flagged] = gnn_decision
             y_score[ema_flagged] = calibrated_tensor
 
-        all_y_true.append(node_labels.cpu().numpy())
-        all_y_pred.append(y_pred.cpu().numpy())
-        all_y_score.append(y_score.cpu().numpy())
+        act = active_node_index(graph)
+        all_y_true.append(node_labels[act].cpu().numpy())
+        all_y_pred.append(y_pred[act].cpu().numpy())
+        all_y_score.append(y_score[act].cpu().numpy())
 
     return (np.concatenate(all_y_true), np.concatenate(all_y_pred),
             np.concatenate(all_y_score))
@@ -599,23 +605,9 @@ def export_results(results: dict, reports_dir: Path) -> pd.DataFrame:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_shared_scaler(loader: CICIDSDataLoader):
-    """
-    Prefer the scaler train.py actually fit the loaded bundle against
-    (saved_models/scaler.joblib) over re-fitting a fresh one, which could
-    silently differ if --load-fraction doesn't match the training run.
-    """
-    scaler_path = cfg.MODELS_DIR / "scaler.joblib"
-    if scaler_path.exists():
-        import joblib
-        logger.info(f"Loading shared scaler from {scaler_path} (matches training run) …")
-        scaler = joblib.load(scaler_path)
-        # loader still needs _feature_cols populated for downstream calls
-        loader._load_csv(CSV_FILES[0])
-        return scaler
-    logger.warning(
-        "No saved_models/scaler.joblib found — fitting a fresh scaler from "
-        "--load-fraction. This may not exactly match the bundle's training scaler."
-    )
+    """The preprocessor train.py fitted the loaded bundle against (manifest-checked)."""
+    from aura import dataset as ds
+    ds.check_manifest()
     return loader.fit_scaler()
 
 

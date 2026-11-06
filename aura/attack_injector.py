@@ -369,9 +369,14 @@ def _realistic_profile(stats_key: str, n: int, f: int) -> np.ndarray:
 
     s = stats[stats_key]
     mean = np.array(s["mean"], dtype=np.float32)
-    std  = np.array(s["std"],  dtype=np.float32)
     p05  = np.array(s["p05"],  dtype=np.float32)
     p95  = np.array(s["p95"],  dtype=np.float32)
+    if "std" in s:
+        std = np.array(s["std"], dtype=np.float32)
+    else:
+        # Stats files written before train_explainer.py recorded std:
+        # robust normal estimate from the interquartile range.
+        std = (np.array(s["p75"], dtype=np.float32) - np.array(s["p25"], dtype=np.float32)) / 1.349
 
     # Clip std to avoid degenerate distributions
     std = np.clip(std, 1e-4, None)
